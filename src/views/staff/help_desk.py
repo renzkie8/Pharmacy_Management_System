@@ -9,9 +9,9 @@ def HelpDeskView():
     
     user = AppState.get_user()
     
-    # --- UI COMPONENTS ---
+    # Interface Components
     
-    # Widget for a single FAQ that drops down
+    # Expandable FAQ element
     def create_faq(question, answer):
         return ft.Container(
             content=ft.ExpansionTile(
@@ -31,13 +31,13 @@ def HelpDeskView():
             margin=ft.margin.only(bottom=5)
         )
     
-    # Widget for the "Step-by-step" cards
+    # Instruction card element
     def create_guide_card(title, steps):
         return ft.Container(
             content=ft.Column([
                 ft.Text(title, size=16, weight="bold", color="primary"),
                 ft.Divider(height=10, color="transparent"),
-                # Loop through steps and make a numbered list
+                # Enumerate steps algorithmically
                 *[ft.Row([
                     ft.Container(
                         content=ft.Text(str(i+1), size=10, color="white", weight="bold"),
@@ -53,7 +53,7 @@ def HelpDeskView():
             expand=True, # Makes cards same height
         )
     
-    # Widget for Contact Support cards
+    # Contact information element
     def create_contact_card(role, email, ext):
         return ft.Container(
             content=ft.Column([
@@ -69,7 +69,7 @@ def HelpDeskView():
             expand=True,
         )
 
-    # --- LAYOUT ---
+    # View Structure
     return ft.Column([
         NavigationHeader("Help Desk", "Guides and Support", show_back=False),
         
@@ -81,11 +81,11 @@ def HelpDeskView():
                 ft.Text("Quick Guides", size=20, weight="bold"),
                 ft.Row([
                     create_guide_card("How to Search", [
-                        "Click 'Find Patient' on sidebar",
+                        "Click 'Find Customer' on sidebar",
                         "Type name/phone",
                         "Click Search button"
                     ]),
-                    create_guide_card("Patient Records", [
+                    create_guide_card("Customer Records", [
                         "You have Read-Only access",
                         "Cannot edit details",
                         "Report errors to Admin"
@@ -102,7 +102,7 @@ def HelpDeskView():
                 # 2. FAQs Section
                 ft.Text("Frequently Asked Questions", size=20, weight="bold"),
                 ft.Column([
-                    create_faq("Can I edit patient info?", "No. Staff access is read-only. Contact an Admin to make changes."),
+                    create_faq("Can I edit customer info?", "No. Staff access is read-only. Contact an Admin to make changes."),
                     create_faq("How do I report a bug?", "Take a screenshot and email IT Support immediately."),
                     create_faq("System is slow?", "Try refreshing the page by going on dashboard."),
                     create_faq("Forgot Password?", "Ask the System Admin to reset your credentials or go to My profile in you dashboard."),

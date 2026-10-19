@@ -1,16 +1,16 @@
 import flet as ft
 from services.database import get_db_connection
 from datetime import datetime
+from utils.notifications import show_success, show_error, show_warning, show_info, CREATE_SUCCESS, UPDATE_SUCCESS, DELETE_SUCCESS, REQUIRED_FIELDS, LOW_STOCK, OUT_OF_STOCK
 
 def ManageStock():
     """Page to Add, Update, Delete, and Search Medicines."""
     
-    # --- STATE VARIABLES ---
+    # Component State Initialization
     selected_medicine_id = None 
     medicine_to_delete = None 
     
-    # --- HELPER: Create Styled Inputs ---
-    # FIX: Removed width=float("inf"). We now rely on the parent container stretching.
+    # UI Component: Styled Input Field
     def create_input(label, icon=None, numeric=False, in_row=False):
         return ft.TextField(
             label=label,
@@ -21,14 +21,12 @@ def ManageStock():
             border_color="outline",
             focused_border_color="primary",
             content_padding=10,
-            # If in_row is True, we expand to share space. 
-            # If False, we don't set width, we let the parent Column stretch us.
             expand=in_row 
         )
 
-    # --- GUI COMPONENTS ---
+    # UI Components Assembly
     
-    # Search Bar
+    # Search input configuration
     search_txt = ft.TextField(
         hint_text="Search medicine name...",
         prefix_icon=ft.Icons.SEARCH,
@@ -36,10 +34,10 @@ def ManageStock():
         height=45,
         content_padding=10,
         border_color="primary", 
-        on_submit=lambda e: load_data() 
+        on_submit=lambda e: load_data(e) 
     )
     
-    # Filters
+    # Filter dropdown controls
     category_filter = ft.Dropdown(
         label="Category",
         options=[
@@ -59,7 +57,7 @@ def ManageStock():
         width=200,
         content_padding=10,
         border_color="primary",
-        on_change=lambda e: load_data() 
+        on_change=lambda e: load_data(e) 
     )
     
     stock_filter = ft.Dropdown(
@@ -74,16 +72,29 @@ def ManageStock():
         width=150,
         content_padding=10,
         border_color="primary",
-        on_change=lambda e: load_data()
+        on_change=lambda e: load_data(e)
     )
 
-    # --- INPUT FIELDS FOR DIALOG ---
-    
-    # 1. Name Input
+    # Custom Table Row Helper (Proportional Stretching)
+    def create_table_row(cells, is_header=False):
+        return ft.Container(
+            padding=ft.padding.symmetric(horizontal=20, vertical=12),
+            bgcolor="surfaceVariant" if is_header else None,
+            border=ft.border.only(bottom=ft.border.BorderSide(1, "outlineVariant")) if not is_header else None,
+            content=ft.Row([
+                ft.Container(cells[0], expand=1),   # ID
+                ft.Container(cells[1], expand=6),   # Name
+                ft.Container(cells[2], expand=3),   # Category
+                ft.Container(cells[3], expand=2.5), # Price
+                ft.Container(cells[4], expand=2.5), # Stock
+                ft.Container(cells[5], expand=3),   # Expiry
+                ft.Container(cells[6], expand=3),   # Supplier
+                ft.Container(cells[7], expand=2, alignment=ft.alignment.center_right), # Actions
+            ], alignment=ft.MainAxisAlignment.START, spacing=20)
+        )
+
+    # Modal Form Fields
     name_input = create_input("Medicine Name", ft.Icons.MEDICATION)
-    
-    # 2. Category Input (The one that was broken)
-    # FIX: Removed width=float("inf"). It will now respect the dialog width.
     category_input = ft.Dropdown(
         label="Category",
         options=category_filter.options[1:], 
@@ -91,52 +102,66 @@ def ManageStock():
         border_color="outline",
         focused_border_color="primary",
     )
-    
-    # 3. Price & Stock (Side by side)
     price_input = create_input("Price (PHP)", None, numeric=True, in_row=True)
     stock_input = create_input("Stock Qty", None, numeric=True, in_row=True)
-    
-    # 4. Expiry & Supplier
     expiry_input = create_input("Expiry (YYYY-MM-DD)", ft.Icons.CALENDAR_TODAY)
     supplier_input = create_input("Supplier", ft.Icons.LOCAL_SHIPPING)
 
-    # Main Data Table
-    stock_table = ft.DataTable(
-        border=ft.border.all(1, "outline"),
-        border_radius=10,
-        vertical_lines=ft.border.BorderSide(1, "outlineVariant"),
-        heading_row_color="surfaceVariant",
-        columns=[
-            ft.DataColumn(ft.Text("ID")),
-            ft.DataColumn(ft.Text("Name")),
-            ft.DataColumn(ft.Text("Category")),
-            ft.DataColumn(ft.Text("Price"), numeric=True),
-            ft.DataColumn(ft.Text("Stock"), numeric=True),
-            ft.DataColumn(ft.Text("Expiry")),
-            ft.DataColumn(ft.Text("Supplier")),
-            ft.DataColumn(ft.Text("Actions")),
-        ],
-        rows=[]
+    # Core Table Components
+    table_header = create_table_row([
+        ft.Text("ID", weight="bold"),
+        ft.Text("Name", weight="bold"),
+        ft.Text("Category", weight="bold"),
+        ft.Text("Price", weight="bold"),
+        ft.Text("Stock", weight="bold"),
+        ft.Text("Expiry", weight="bold"),
+        ft.Text("Supplier", weight="bold"),
+        ft.Text("Actions", weight="bold", text_align=ft.TextAlign.RIGHT),
+    ], is_header=True)
+
+    stock_list = ft.ListView(expand=True, spacing=0)
+    
+    # Empty state container
+    empty_state = ft.Container(
+        content=ft.Column([
+            ft.Icon(ft.Icons.INVENTORY_2_OUTLINED, size=100, color="outline"),
+            ft.Container(height=20),
+            ft.Text("No medicines in inventory", size=20, weight="bold", color="outline"),
+            ft.Container(height=10),
+            ft.Text("To get started, click the 'Add Medicine' button above", 
+                   size=14, color="outline", text_align=ft.TextAlign.CENTER),
+        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=5),
+        padding=80,
+        alignment=ft.alignment.center,
+        visible=False,
+        expand=True,
+    )
+    
+    # Main container for the scrolling list
+    table_body_container = ft.Container(
+        content=stock_list,
+        padding=0,
+        expand=True
     )
 
-    # --- APP LOGIC ---
+    # Application Business Logic
 
-    def load_data():
-        """Connects to DB and fills the table."""
+    def load_data(e=None):
+        """Fetch and populate medicine inventory data."""
         conn = get_db_connection()
         cursor = conn.cursor()
-        
+
         query = "SELECT * FROM medicines WHERE 1=1"
         params = []
 
         if search_txt.value:
             query += " AND name LIKE ?"
             params.append(f"%{search_txt.value}%")
-        
+
         if category_filter.value != "All":
             query += " AND category = ?"
             params.append(category_filter.value)
-            
+
         if stock_filter.value == "Low Stock":
             query += " AND stock > 0 AND stock < 10"
         elif stock_filter.value == "Out of Stock":
@@ -150,207 +175,150 @@ def ManageStock():
         meds = cursor.fetchall()
         conn.close()
 
-        stock_table.rows.clear()
-        
-        for m in meds:
-            if m['stock'] == 0: stock_color = "error" 
-            elif m['stock'] < 10: stock_color = "orange"
-            else: stock_color = "primary"
+        stock_list.controls.clear()
 
-            stock_table.rows.append(
-                ft.DataRow(cells=[
-                    ft.DataCell(ft.Text(str(m['id']))),
-                    ft.DataCell(ft.Text(m['name'], weight="bold")),
-                    ft.DataCell(ft.Text(m['category'])),
-                    ft.DataCell(ft.Text(f"₱{m['price']:.2f}")),
-                    ft.DataCell(ft.Text(str(m['stock']), color=stock_color, weight="bold")),
-                    ft.DataCell(ft.Text(m['expiry_date'])),
-                    ft.DataCell(ft.Text(m['supplier'] or "N/A")),
-                    ft.DataCell(ft.Row([
+        if not meds:
+            page = e.page if e else (stock_list.page if stock_list.page else None)
+            if (search_txt.value or category_filter.value != "All" or stock_filter.value != "All") and page:
+                show_info(page, "No medicine found matching your search criteria.")
+                table_body_container.visible = True
+                empty_state.visible = False
+            else:
+                table_body_container.visible = False
+                empty_state.visible = True
+            
+            if stock_list.page:
+                table_body_container.update()
+                empty_state.update()
+            return
+        
+        table_body_container.visible = True
+        empty_state.visible = False
+
+        for m in meds:
+            if m['stock'] == 0:
+                stock_color = "error"
+            elif m['stock'] < 10:
+                stock_color = "orange"
+            else:
+                stock_color = "primary"
+
+            stock_list.controls.append(
+                create_table_row([
+                    ft.Text(str(m['id'])),
+                    ft.Text(m['name'], weight="bold"),
+                    ft.Text(m['category']),
+                    ft.Text(f"₱{m['price']:.2f}"),
+                    ft.Text(str(m['stock']), color=stock_color, weight="bold"),
+                    ft.Text(m['expiry_date']),
+                    ft.Text(m['supplier'] or "N/A"),
+                    ft.Row([
                         ft.IconButton(
-                            icon=ft.Icons.EDIT, 
-                            icon_color="primary", 
+                            icon=ft.Icons.EDIT,
+                            icon_size=18,
+                            icon_color="primary",
                             tooltip="Edit",
                             on_click=lambda e, med=m: open_edit_dialog(e, med)
                         ),
                         ft.IconButton(
-                            icon=ft.Icons.DELETE, 
-                            icon_color="error", 
+                            icon=ft.Icons.DELETE,
+                            icon_size=18,
+                            icon_color="error",
                             tooltip="Delete",
                             on_click=lambda e, mid=m['id']: prompt_delete(e, mid)
                         ),
-                    ])),
+                    ], spacing=0, alignment=ft.MainAxisAlignment.END),
                 ])
             )
-        
-        if stock_table.page:
-            stock_table.update()
 
-    # --- DIALOG FUNCTIONS ---
+        if stock_list.page:
+            table_body_container.update()
+            empty_state.update()
 
+    # Modal Operation Handlers (keeping original logic)
     def open_add_dialog(e):
         nonlocal selected_medicine_id
         selected_medicine_id = None 
-        
-        name_input.value = ""
-        category_input.value = None
-        price_input.value = ""
-        stock_input.value = ""
-        expiry_input.value = ""
-        supplier_input.value = ""
-        
+        name_input.value = ""; category_input.value = None
+        price_input.value = ""; stock_input.value = ""
+        expiry_input.value = ""; supplier_input.value = ""
         dialog.title = ft.Row([ft.Icon(ft.Icons.ADD_BOX, color="primary"), ft.Text("Add New Medicine")])
         e.page.open(dialog)
 
     def open_edit_dialog(e, med):
         nonlocal selected_medicine_id
         selected_medicine_id = med['id'] 
-        
-        name_input.value = med['name']
-        category_input.value = med['category']
-        price_input.value = str(med['price'])
-        stock_input.value = str(med['stock'])
-        expiry_input.value = med['expiry_date']
-        supplier_input.value = med['supplier']
-        
+        name_input.value = med['name']; category_input.value = med['category']
+        price_input.value = str(med['price']); stock_input.value = str(med['stock'])
+        expiry_input.value = med['expiry_date']; supplier_input.value = med['supplier']
         dialog.title = ft.Row([ft.Icon(ft.Icons.EDIT, color="primary"), ft.Text("Edit Medicine")])
         e.page.open(dialog)
 
     def save_medicine(e):
         if not name_input.value or not price_input.value or not stock_input.value:
-            e.page.snack_bar = ft.SnackBar(ft.Text("Please fill in Name, Price, and Stock!"), bgcolor="error")
-            e.page.snack_bar.open = True
-            e.page.update()
-            return
-
+            show_error(e.page, REQUIRED_FIELDS); e.page.update(); return
         try:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-
+            conn = get_db_connection(); cursor = conn.cursor()
             if selected_medicine_id is None:
-                cursor.execute("""
-                    INSERT INTO medicines (name, category, price, stock, expiry_date, supplier) 
-                    VALUES (?, ?, ?, ?, ?, ?)
-                """, (
-                    name_input.value, category_input.value, float(price_input.value), 
-                    int(stock_input.value), expiry_input.value, supplier_input.value
-                ))
-                msg = "Medicine Added Successfully!"
+                cursor.execute("INSERT INTO medicines (name, category, price, stock, expiry_date, supplier) VALUES (?, ?, ?, ?, ?, ?)", 
+                    (name_input.value, category_input.value, float(price_input.value), int(stock_input.value), expiry_input.value, supplier_input.value))
+                msg = CREATE_SUCCESS.format(name_input.value)
             else:
-                cursor.execute("""
-                    UPDATE medicines 
-                    SET name=?, category=?, price=?, stock=?, expiry_date=?, supplier=?
-                    WHERE id=?
-                """, (
-                    name_input.value, category_input.value, float(price_input.value), 
-                    int(stock_input.value), expiry_input.value, supplier_input.value,
-                    selected_medicine_id
-                ))
-                msg = "Medicine Updated Successfully!"
-
-            conn.commit()
-            conn.close()
-            
-            e.page.close(dialog)
-            load_data()
-            e.page.snack_bar = ft.SnackBar(ft.Text(msg), bgcolor="green")
-            e.page.snack_bar.open = True
-            e.page.update()
-
-        except Exception as ex:
-            e.page.snack_bar = ft.SnackBar(ft.Text(f"Error: {str(ex)}"), bgcolor="error")
-            e.page.snack_bar.open = True
-            e.page.update()
+                cursor.execute("UPDATE medicines SET name=?, category=?, price=?, stock=?, expiry_date=?, supplier=? WHERE id=?",
+                    (name_input.value, category_input.value, float(price_input.value), int(stock_input.value), expiry_input.value, supplier_input.value, selected_medicine_id))
+                msg = UPDATE_SUCCESS.format(name_input.value)
+            conn.commit(); conn.close(); e.page.close(dialog); load_data(); show_success(e.page, msg); e.page.update()
+        except Exception as ex: show_error(e.page, f"Error: {str(ex)}"); e.page.update()
 
     def prompt_delete(e, med_id):
-        nonlocal medicine_to_delete
-        medicine_to_delete = med_id 
-        e.page.open(del_dialog)
+        nonlocal medicine_to_delete; medicine_to_delete = med_id; e.page.open(del_dialog)
 
     def confirm_delete_action(e):
         if medicine_to_delete is None: return
-        conn = get_db_connection()
-        conn.execute("DELETE FROM medicines WHERE id = ?", (medicine_to_delete,))
-        conn.commit()
-        conn.close()
-        e.page.close(del_dialog)
-        load_data()
-        e.page.snack_bar = ft.SnackBar(ft.Text("Medicine Deleted!"), bgcolor="error")
-        e.page.snack_bar.open = True
-        e.page.update()
+        conn = get_db_connection(); conn.execute("DELETE FROM medicines WHERE id = ?", (medicine_to_delete,)); conn.commit(); conn.close()
+        e.page.close(del_dialog); load_data(); show_success(e.page, DELETE_SUCCESS.format("Medicine")); e.page.update()
 
-    # --- DEFINE DIALOGS ---
-    
-    # 1. Add/Edit Form
-    dialog = ft.AlertDialog(
-        bgcolor="surface",
-        content=ft.Container(
-            width=500,
-            content=ft.Column([
-                # FIX: Using STRETCH ensures inputs fill the width, preventing the "Dropdown too wide" bug
-                name_input,
-                ft.Container(height=5),
-                category_input,
-                ft.Container(height=5),
-                ft.Row([price_input, stock_input], spacing=15),
-                ft.Container(height=5),
-                expiry_input,
-                ft.Container(height=5),
-                supplier_input
-            ], tight=True, horizontal_alignment=ft.CrossAxisAlignment.STRETCH) 
-        ),
-        actions=[
-            ft.TextButton("Cancel", on_click=lambda e: e.page.close(dialog)),
-            ft.ElevatedButton("Save", bgcolor="primary", color="onPrimary", on_click=save_medicine),
-        ]
-    )
+    # Modal Definitions
+    dialog = ft.AlertDialog(bgcolor="surface", content=ft.Container(width=500, content=ft.Column([
+        name_input, ft.Container(height=5), category_input, ft.Container(height=5),
+        ft.Row([price_input, stock_input], spacing=15), ft.Container(height=5), expiry_input,
+        ft.Container(height=5), supplier_input], tight=True, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)),
+        actions=[ft.TextButton("Cancel", on_click=lambda e: e.page.close(dialog)), ft.ElevatedButton("Save", bgcolor="primary", color="onPrimary", on_click=save_medicine)])
 
-    # 2. Delete Confirmation
-    del_dialog = ft.AlertDialog(
-        bgcolor="surface",
-        title=ft.Text("Confirm Delete"),
-        content=ft.Text("Are you sure you want to delete this medicine?"),
-        actions=[
-            ft.TextButton("Cancel", on_click=lambda e: e.page.close(del_dialog)),
-            ft.ElevatedButton("Delete", bgcolor="error", color="white", on_click=confirm_delete_action),
-        ]
-    )
+    del_dialog = ft.AlertDialog(bgcolor="surface", title=ft.Text("Confirm Delete"), content=ft.Text("Are you sure you want to delete this medicine?"),
+        actions=[ft.TextButton("Cancel", on_click=lambda e: e.page.close(del_dialog)), ft.ElevatedButton("Delete", bgcolor="error", color="white", on_click=confirm_delete_action)])
 
-    class FakePage:
-        def update(self): pass
     load_data()
 
-    # --- PAGE LAYOUT ---
+    # Main View Assembly
     return ft.Column([
         ft.Row([
             ft.Text("Stock Management", size=28, weight="bold"),
-            ft.ElevatedButton(
-                "Add Medicine", 
-                icon=ft.Icons.ADD, 
-                bgcolor="primary", 
-                color="onPrimary", 
-                on_click=open_add_dialog
-            ),
+            ft.ElevatedButton("Add Medicine", icon=ft.Icons.ADD, bgcolor="primary", color="onPrimary", on_click=open_add_dialog),
         ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
         
         ft.Container(height=10),
         
         ft.Container(
             content=ft.Row([
-                search_txt,
-                category_filter,
-                stock_filter,
-                ft.IconButton(icon=ft.Icons.SEARCH, icon_color="primary", on_click=lambda e: load_data())
-            ], spacing=10),
-            padding=15,
-            bgcolor="surfaceVariant",
-            border_radius=10
+                search_txt, category_filter, stock_filter,
+                ft.IconButton(icon=ft.Icons.SEARCH, icon_color="primary", on_click=lambda e: load_data(e))
+            ], spacing=10, expand=True),
+            padding=15, bgcolor="surfaceVariant", border_radius=10,
         ),
         
         ft.Container(height=20),
         
-        ft.Column([
-            ft.Row([stock_table], scroll=ft.ScrollMode.AUTO)
-        ], scroll=ft.ScrollMode.AUTO, expand=True),
+        # Responsive Custom Table Box
+        ft.Container(
+            content=ft.Column([
+                table_header,
+                ft.Stack([table_body_container, empty_state], expand=True),
+            ], spacing=0, expand=True),
+            border=ft.border.all(1, "outline"),
+            border_radius=10,
+            expand=True,
+            clip_behavior=ft.ClipBehavior.ANTI_ALIAS 
+        ),
         
-    ], scroll=ft.ScrollMode.AUTO, expand=True)
+    ], scroll=ft.ScrollMode.AUTO, expand=True, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)

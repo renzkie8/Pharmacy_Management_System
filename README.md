@@ -1,9 +1,49 @@
+# PharmaOps — Pharmacy Management System
+
+Flet and SQLite pharmacy-management group project with role-based workflows.
+
+**Portfolio:** [Carl Renz Colico](https://github.com/renzkie8) · **Year:** Year 3
+
+## Methodology
+
+Organize pharmacy workflows into role-based views, shared services and SQLite persistence; include inventory, billing and prescription-related interfaces.
+
+## Results and limitations
+
+The supplied local snapshot contains substantial updates compared with the existing repository. Team credits and original documentation are retained alongside portfolio notes; live services and all user flows were not re-tested.
+
+This upload documents the supplied submission. Experiments, model training, graphical interfaces and external services were not fully rerun during portfolio preparation. See VALIDATION.md for checks actually performed.
+
+## Getting started
+
+Use Python in a dedicated virtual environment. Install `requirements.txt` if present, otherwise inspect the imports before installing dependencies. Run an appropriate entry script, for example `python "app.py"`, from its expected working directory. Interactive exercises may prompt for input.
+
+## Contents
+
+See [FILES.md](FILES.md) for the file inventory and [DATA.md](DATA.md) for inputs and exclusions. Original documentation, when supplied, follows below. Nonidentical drafts remain identifiable by their original names or a `variant` suffix.
+
+## Provenance and credits
+
+Original PharmaOps team and role credits are retained in the project documentation. This portfolio copy does not claim sole authorship of the collaborative application.
+
+Source submissions: `Pharmacy-Management-System-main.zip`
+
+No new blanket license is applied to third-party assets, datasets, course templates or collaborative work. Existing notices remain applicable.
+
+## Topics
+
+python, flet, sqlite, pharmacy-management, software-engineering, group-project
+
+---
+
+## Original project documentation
+
 # Pharmacy Management System (PMS)
-**Group 5 - Kaputt Kommandos**  
-*CCCS 106 - Application Development and Emerging Technologies*
+**Group 5 - PharmaOps**  
+*CCCS 106 - Application Development and Emerging Technologies | CS 3110 - Software Engineering 1 | CS 3212 - Software Engineering 2*
 
 ## Project Overview
-The **Kaputt Kommandos PMS** is a modern desktop application designed to streamline daily pharmacy operations. It handles user authentication, inventory tracking, prescription validation, billing, and patient management.
+The **PharmaOps PMS** is a modern web application designed to streamline daily pharmacy operations. It handles user authentication (including Google Sign-In), inventory tracking, prescription validation, billing, and patient management.
 
 Built using **Python** and **Flet** (Flutter for Python), the system features a responsive, material-design interface with **Dark Mode** support and **Role-Based Access Control (RBAC)**.
 
@@ -12,19 +52,53 @@ Built using **Python** and **Flet** (Flutter for Python), the system features a 
 ## The Team
 | Name | Role | Responsibility |
 | :--- | :--- | :--- |
-| **Carl Renz Colico** | Product Owner / PM | Product Lead / Vision & Feature Prioritization, UI/UX & Accessibility Designer |
-| **Kenji Nathaniel David** | Product Owner | QA / Test Coordinator, Documentation & Release Manager |
-| **Francis Gabriel Nonato** | Program Manager | Lead Developer, UI/UX & Accessibility Designer |
+| **Carl Renz Colico** | Product Owner / PM | Product Lead / Vision & Feature Prioritization, UI/UX & Accessibility Designer, QA / Test Coordinator, Documentation |
+| **Kenji Nathaniel David** | | |
+| **Francis Gabriel Nonato** | Program Manager | Lead Developer, UI/UX & Accessibility Designer, Documentation & Release Manager |
+
+---
+
+## What's New in V2.0 (Showcase-Ready)
+
+### 1. Robustness & Reliability (The "No-Crash" Rule)
+*   **Input Validation:** Strict constraints on text fields, dropdowns, and uploads.
+*   **Graceful Error Handling:** Console errors replaced with user-friendly Toast notifications.
+*   **Edge Case Testing:** Dashboards and lists now handle "zero data" states gracefully.
+*   **Loading Indicators:** Visual progress feedback for deletions and long-running actions.
+*   **Duplicate Accounts Prevention:** Validation for unique Username, Email, and Full Name.
+*   **Revenue Algorithm Fixes:** Reports now correctly filter out pending and cancelled orders.
+
+### 2. User Experience (UX) & Polish
+*   **Navigation Refinement:** Added "Return/Go Back" paths to all user dashboards.
+*   **UI Consistency:** Standardized margins, fonts, and button styles across all views.
+*   **Responsive Design:** Application elements now adapt to various resolutions and window sizes.
+*   **Header & Branding:** Implementation of the PharmaOps logo and improved header placement.
+*   **Clean Interface:** Simplified landing page with role-based login selection.
+
+### 3. Feature Depth (The "V2.0" Additions)
+*   **Search & Filter:** Real-time search bars and multi-option filtering for medicines and logs.
+*   **Data Persistence:** Secure SQLite storage with hashed/encrypted sensitive information.
+*   **Authentication:** "Sign in with Google" integration for secure session handling.
+*   **Audit Trail:** Comprehensive activity logs for auditing critical system actions.
+*   **Notification System:** Red badges for carts and notification text for order counts.
+*   **Profile Settings:** Dedicated Setting UI for all roles to manage personal information.
+*   **Pharmacist Controls:** Refined Reject/Approve logic for prescription validation.
+
+### 4. Developer Quality & Documentation
+*   **Code Cleanup:** Removed dead code, unused variables, and console logs.
+*   **README Overhaul:** Addition of setup guides and V2.0 details.
 
 ---
 
 ## Key Features
 *   **Role-Based Security:** Distinct dashboards and permissions for Patients, Admins, Pharmacists, Inventory Managers, Billing Clerks, and Staff.
+*   **Google OAuth Integration:** Sign up and log in with Google for a streamlined authentication experience.
 *   **Adaptive UI:** Fully supported **Dark Mode** and Light Mode with a cohesive Teal theme.
 *   **Inventory Management:** Real-time tracking of medicine stock with visual "Low Stock" alerts.
 *   **Prescription Handling:** Pharmacists can view pending prescriptions and dispense medication.
-*   **Patient Portal:** Patients can sign up, search for medicines, and view their cart.
-*   **Billing System:** Generation of invoices and sales tracking.
+*   **Patient Portal:** Patients can sign up, search for medicines, manage their cart, and view invoices.
+*   **Billing System:** Generation of invoices, payment processing, and sales reporting.
+*   **Duplicate Account Prevention:** Signup validates uniqueness of username, email, and full name.
 *   **Local Database:** Powered by **SQLite** for fast, persistent data storage without external servers.
 
 ---
@@ -98,9 +172,7 @@ The database is pre-seeded with these accounts for testing purposes:
 | **Billing Clerk** | `bill` | `bill123` | Invoices, Sales Reports |
 | **Staff Member** | `staff` | `staff123` | Patient Search |
 
-New users can also create an account using the **"Create Account"** button on the Patient Login page.
-
----
+New users can also create an account using the **"Create Account"** tab or sign up via **Google** on the landing page. Newly created accounts require **Admin approval** before they can log in.
 
 ---
 
@@ -125,19 +197,15 @@ Below are screenshots demonstrating overall features of the app:
 
 ---
 
----
-
 Below are screenshots demonstrating various features of patient manual: 
 | Feature | Patient Manual | Screenshot | 
 |----------|-------------|-------------| 
 | **Patient Browse Medicine** | Allows patients to browse available medicines, view details, and use the search bar to quickly find medicines| ![Browsing Medicine](src/assets/patient_browse_med.png)<br>![Medicine Search Page](src/assets/patient_meds_page.png) | 
 | **Upload Prescription** | Enables patients to submit a prescription form for pharmacist before purchasing required medication | ![Upload Prescription](src/assets/patient_upload_presc.png)<br>![Upload Prescription Page](src/assets/patient_prescription_page.png) | 
 | **Patient Browse Cart** | Shows all selected medicines in the cart, allowing patients to review, update quantities, or remove items before checkout. | ![Patient Cart](src/assets/patient_view_cart.png)<br>![Patient Cart Page](src/assets/patient_view_cart_page.png) | 
-| **Viewing Patient Orders** | Displays a list of all past and current orders, including order status and purchase history also total amount for easy tracking | ![Viewing All Recent Orders](src/assets/patient_view_all)<br>![View All Orders Page](src/assets/patient_view_all_orders_page.png) | 
+| **Viewing Patient Orders** | Displays a list of all past and current orders, including order status, purchase history, and total amount for easy tracking | ![Viewing All Recent Orders](src/assets/patient_view_all.png)<br>![View All Orders Page](src/assets/patient_view_all_orders_page.png) | 
 | **Patient Side-bar Navigation**| Provides easy access to all patient features such as browsing medicine, orders, cart, bills, and profile through a clean navigation menu| ![Patient Side Navigation Bar](src/assets/patient_nav_bar.png) | 
-| **Viewing Patient Profile** | Shows the patient’s personal information, including contact details, account profile, as well as logout button and with options for updates | ![Patient Profile](src/assets/patient_profile)<br>![Patient Profile Page](src/assets/patient_profile_page.png) |
-
----
+| **Viewing Patient Profile** | Shows the patient’s personal information, including contact details, account profile, as well as logout button and with options for updates | ![Patient Profile](src/assets/patient_profile.png)<br>![Patient Profile Page](src/assets/patient_profile_page.png) |
 
 ---
 
@@ -151,8 +219,6 @@ Below are screenshots demonstrating various features of admin manual:
 | **Admin Nav Bar** | Provides easy navigation to all admin tools and features through a structured and organized sidebar | ![Admin Navigation Bar](src/assets/admin_nav_bar.png) | 
 | **Admin Manage Inventory Stock** | Allows the admin to view, update, and manage available inventory, including adding stock and monitoring low quantities | ![Manage Inventory Stock](src/assets/admin_manage_stock.png) |
 | **Admin Alert System Notification** | Shows system notifications and alerts for critical events such as low stock, prescriptions | ![Alert System Notification](src/assets/admin_system_activity.png) |
-
----
 
 ---
 
@@ -172,8 +238,6 @@ Below are screenshots demonstrating various features of pharmacist manual:
 
 ---
 
----
-
 Below are screenshots demonstrating various features of inventory manager manual:
 
 | Feature | Description | Screenshot |
@@ -182,8 +246,6 @@ Below are screenshots demonstrating various features of inventory manager manual
 | **Inventory Manager Manage Stock** | Allows the inventory manager to view all medicines, update quantities, restock items, and monitor product availability | ![Manage Stock](src/assets/invmng_manage_stock.png)<br>![Manage Stock Page](src/assets/invmng_stock_management_page.png) |
 | **Adding Medicine** | Enables the inventory manager to add new medicines to the system by entering details such as name, price, category, stock quantity,supplier and expiry date | ![Add Medicine](src/assets/invmng_add_medicines.png) |
 | **Inventory Manager Side-Navigation Bar** | Provides quick access to all inventory management features through an organized navigation sidebar| ![Inventory Manager Nav Bar](src/assets/invmng_side_nav.png) |
-
----
 
 ---
 
@@ -202,8 +264,6 @@ Below are screenshots demonstrating various features of billing clerk manual:
 
 ---
 
----
-
 Below are screenshots demonstrating various features of staff member(s) manual:
 
 | Feature | Description | Screenshot |
@@ -217,5 +277,5 @@ Below are screenshots demonstrating various features of staff member(s) manual:
 | **Staff Guidelines** | Provides important guidelines and protocols that staff members must follow while using the system | ![Staff Guidelines](src/assets/staff_guidelines.png) |
 | **Staff Side-Navigation** | Offers easy access to all staff tools and pages through an organized navigation panel | ![Staff Side Nav](src/assets/staff_side_nav.png) |
 
-
 ---
+

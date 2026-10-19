@@ -7,14 +7,14 @@ from services.database import get_db_connection
 def MedicineSearch():
     """Medicine search and browse view with cart integration."""
     
-    # checking if the user is actually logged in
+    # Validate user session
     user = AppState.get_user()
     if not user:
         return ft.Text("Please log in first", color="error")
     
     user_id = user['id']
     
-    # search bar for finding meds
+    # Initialize text input
     search_field = ft.TextField(
         hint_text="Search medicines by name...",
         prefix_icon=ft.Icons.SEARCH,
@@ -22,7 +22,7 @@ def MedicineSearch():
         expand=True,
     )
     
-    # dropdown to filter by category
+    # Initialize category selector
     category_dropdown = ft.Dropdown(
         label="Category",
         options=[
@@ -45,10 +45,10 @@ def MedicineSearch():
         border_color="primary", # dark mode fix
     )
     
-    # container that holds all the results
+    # Initialize primary container
     results_container = ft.Column(spacing=10)
     
-    # Cart badge container for display
+    # Initialize cart indicator
     cart_badge_text = ft.Text("0", size=9, weight="bold", color="onPrimary")
     cart_badge = ft.Container(
         content=cart_badge_text,
@@ -103,10 +103,10 @@ def MedicineSearch():
     
     AppState.add_listener('cart_changed', on_cart_changed)
     
-    # Initial cart count
+    # Execute initial count retrieval
     update_cart_badge_display()
     
-    # helper for showing toast messages
+    # Notification utility
     def show_snackbar(e, message, error=False):
         e.page.snack_bar = ft.SnackBar(
             content=ft.Text(message),
@@ -115,13 +115,27 @@ def MedicineSearch():
         e.page.snack_bar.open = True
         e.page.update()
     
-    # logic to push items to the cart database
+    # Execute cart insertion with stock validation
     def add_to_cart(medicine_id, medicine_name, e):
         conn = get_db_connection()
         cursor = conn.cursor()
         
         try:
-            # creating table just in case it doesn't exist yet
+            # 1. Verify current stock directly from database
+            cursor.execute("SELECT stock FROM medicines WHERE id = ?", (medicine_id,))
+            res = cursor.fetchone()
+            if not res:
+                show_snackbar(e, "Medicine not found", error=True)
+                return
+            
+            current_stock = res[0]
+            if current_stock <= 1:
+                show_snackbar(e, f"Sorry, {medicine_name} must maintain at least 1 unit in the warehouse stock", error=True)
+                # Refresh list to update UI
+                load_medicines(e)
+                return
+
+            # 2. Ensure cart table exists
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS cart (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -134,51 +148,52 @@ def MedicineSearch():
                 )
             """)
             
-            # check if we already have this item in the cart
+            # 3. Update stock and cart in a single transaction
+            # Deduct 1 from stock
+            cursor.execute("UPDATE medicines SET stock = stock - 1 WHERE id = ?", (medicine_id,))
+            
+            # Check if item already in cart
             cursor.execute("""
-                SELECT id, quantity FROM cart 
+                SELECT id FROM cart 
                 WHERE patient_id = ? AND medicine_id = ?
             """, (user_id, medicine_id))
-            
             existing = cursor.fetchone()
             
             if existing:
-                # if yes, just bump up the quantity
-                cursor.execute("""
-                    UPDATE cart 
-                    SET quantity = quantity + 1 
-                    WHERE id = ?
-                """, (existing[0],))
+                cursor.execute("UPDATE cart SET quantity = quantity + 1 WHERE id = ?", (existing[0],))
                 show_snackbar(e, f"Updated {medicine_name} quantity in cart")
-                # Increment badge count immediately for instant feedback
-                current_count = int(cart_badge_text.value)
-                cart_badge_text.value = str(current_count + 1)
             else:
-                # if no, insert a new row
                 cursor.execute("""
                     INSERT INTO cart (patient_id, medicine_id, quantity)
                     VALUES (?, ?, 1)
                 """, (user_id, medicine_id))
                 show_snackbar(e, f"Added {medicine_name} to cart")
-                # Increment badge count immediately for instant feedback
-                current_count = int(cart_badge_text.value)
-                cart_badge_text.value = str(current_count + 1)
             
             conn.commit()
             
-            # notify the rest of the app that cart changed (updates sidebar)
+            # 4. Synchronize UI
+            # Update local list to show decreased stock
+            load_medicines(e)
+            
+            # Update top-right badge
+            update_cart_badge_display()
+            
+            # Emit event for sidebar synchronization
             try:
                 AppState.emit('cart_changed')
             except Exception:
                 pass
             
+            # Show global success indicator
+            AppState.show_success()
+            
         except Exception as ex:
+            if conn: conn.rollback()
             show_snackbar(e, f"Failed to add to cart: {str(ex)}", error=True)
         finally:
             conn.close()
     
-    # this function used to show the details dialog
-    # keeping it here in case we need it back later, but it's not used in the button anymore
+    # Dismiss modal overlay
     def view_medicine_details(med, e):
         dialog = ft.AlertDialog(
             title=ft.Text(med['name']),
@@ -229,7 +244,7 @@ def MedicineSearch():
         e.page.dialog.open = False
         e.page.update()
     
-    # creates the UI card for each medicine
+    # Component renderer
     def create_medicine_card(med):
         return ft.Container(
             content=ft.Row([
@@ -285,7 +300,7 @@ def MedicineSearch():
             bgcolor="surface",
         )
     
-    # grabs the list of medicines from the DB
+    # Query system inventory
     def load_medicines(e=None):
         query = search_field.value.lower() if search_field.value else ""
         category = category_dropdown.value
@@ -312,7 +327,7 @@ def MedicineSearch():
         medicines = cursor.fetchall()
         conn.close()
         
-        # converting DB rows to dictionary so it's easier to use
+        # Map query results
         medicine_dicts = []
         for med in medicines:
             medicine_dicts.append({
@@ -331,7 +346,7 @@ def MedicineSearch():
             for med in medicine_dicts:
                 results_container.controls.append(create_medicine_card(med))
         else:
-            # empty state
+            # Render empty results fallback
             results_container.controls.append(
                 ft.Container(
                     content=ft.Column([
@@ -352,7 +367,7 @@ def MedicineSearch():
         def update(self): pass
     load_medicines(type('Event', (), {'page': FakePage()})())
     
-    # Main layout structure with cart badge in top-right
+    # View Structure
     header_row = ft.Row([
         ft.Column([
             ft.Text("Search Medicines", size=28, weight="bold"),

@@ -1,9 +1,58 @@
-# Python cache files
+# Python cache
 __pycache__/
 *.pyc
+*.pyo
 
 # Database
-pharmacy.db
+src/storage/
+*.db
 
-# Virtual Environment
+# Virtual environment
+venv/
 .venv/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Gemini agent
+.gemini/
+
+# Environment variables
+.env
+
+# Temp files
+test_*.py
+# Local credentials and personal configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+# Generated environments and caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+node_modules/
+.ipynb_checkpoints/
+*.class
+build/
+dist/
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+# Local data stores and trained artifacts
+*.db
+*.sqlite*
+*.h5
+*.keras
+*.pt
+*.pth
+training_checkpoints/
