@@ -239,7 +239,7 @@ def PharmacistMedicineSearch():
         if e and hasattr(e, 'page'):
             e.page.update()
     
-    # Initialize primary component state
+    # Initial load
     class FakePage:
         snack_bar = None
         def update(self): pass

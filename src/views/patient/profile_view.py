@@ -3,29 +3,28 @@
 import flet as ft
 from state.app_state import AppState
 from services.database import get_db_connection
-from utils.notifications import show_success, show_error
 
 def ProfileView():
     """Patient profile and account settings."""
     
     user = AppState.get_user()
     
-    # Fetch user profile data
+    # 1. Fetch user data
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM users WHERE id = ?", (user['id'],))
     row = cursor.fetchone()
-    # Map user record to dictionary
+    # Convert to dict for easier handling
     user_data = dict(row) 
     conn.close()
     
-    # Utility Functions
+    # --- HELPERS ---
     def get_display_name():
         fname = user_data.get('full_name', '') or ""
         lname = user_data.get('last_name', '') or ""
         return f"{fname} {lname}".strip()
 
-    # Initialize display components
+    # Display Widgets (Text labels that will update)
     txt_name_header = ft.Text(get_display_name(), size=24, weight="bold")
     txt_username_header = ft.Text(f"@{user_data['username']}", size=14, color="outline")
     
@@ -49,10 +48,11 @@ def ProfileView():
             bgcolor="surface", # Ensures visibility
         )
     
-    # Profile Editing Logic
+    # --- EDIT PROFILE LOGIC ---
     def edit_profile(e):
+        print("Edit profile clicked")
         
-        # UI Component: Modal Input Field
+        # Helper for consistent inputs inside dialog
         def create_input(label, val, icon, multiline=False):
             return ft.TextField(
                 label=label,
@@ -65,7 +65,7 @@ def ProfileView():
                 text_size=14,
             )
 
-        # Initialize edit form fields
+        # Create fields
         first_name_field = create_input("First Name", user_data.get('full_name'), ft.Icons.PERSON)
         last_name_field = create_input("Last Name", user_data.get('last_name'), ft.Icons.PERSON)
         email_field = create_input("Email", user_data.get('email'), ft.Icons.EMAIL)
@@ -92,7 +92,7 @@ def ProfileView():
                 ))
                 conn.commit()
                 
-                # Update local session state
+                # Update memory
                 user_data['full_name'] = first_name_field.value
                 user_data['last_name'] = last_name_field.value
                 user_data['email'] = email_field.value
@@ -100,28 +100,30 @@ def ProfileView():
                 user_data['dob'] = dob_field.value
                 user_data['address'] = address_field.value
                 
-                # Refresh UI components
+                # Update screen immediately
                 txt_name_header.value = get_display_name()
                 txt_email.value = email_field.value or "Not provided"
                 txt_phone.value = phone_field.value or "Not provided"
                 txt_dob.value = dob_field.value or "Not provided"
                 txt_address.value = address_field.value or "Not provided"
                 
-                # Synchronize global application state
+                # Update sidebar name
                 user['full_name'] = first_name_field.value
                 AppState.set_user(user)
 
                 dialog_e.page.close(edit_dialog)
-                show_success(dialog_e.page, "Profile updated successfully!")
+                dialog_e.page.snack_bar = ft.SnackBar(content=ft.Text("Profile updated successfully!"), bgcolor="primary")
+                dialog_e.page.snack_bar.open = True
                 dialog_e.page.update()
-
+                
             except Exception as ex:
-                show_error(dialog_e.page, f"Error updating profile")
+                dialog_e.page.snack_bar = ft.SnackBar(content=ft.Text(f"Error: {str(ex)}"), bgcolor="error")
+                dialog_e.page.snack_bar.open = True
                 dialog_e.page.update()
             finally:
                 conn.close()
         
-        # Render edit profile modal
+        # The Dialog
         edit_dialog = ft.AlertDialog(
             modal=True,
             title=ft.Row([ft.Icon(ft.Icons.EDIT, color="primary"), ft.Text("Edit Profile")]),
@@ -146,7 +148,7 @@ def ProfileView():
         )
         e.page.open(edit_dialog)
     
-    # Password Modification Logic
+    # --- CHANGE PASSWORD LOGIC ---
     def change_password(e):
         def create_pass_input(label, icon):
             return ft.TextField(
@@ -165,7 +167,7 @@ def ProfileView():
         
         def save_password(dialog_e):
             error_text.value = ""
-            # Validate input constraints
+            # Validation
             if not all([current_password.value, new_password.value, confirm_password.value]):
                 error_text.value = "All fields are required"
                 dialog_e.page.update()
@@ -176,7 +178,7 @@ def ProfileView():
                 dialog_e.page.update()
                 return
             
-            # Verify current credentials
+            # Check DB
             conn = get_db_connection()
             cursor = conn.cursor()
             cursor.execute("SELECT password FROM users WHERE id = ?", (user_data['id'],))
@@ -188,13 +190,14 @@ def ProfileView():
                 dialog_e.page.update()
                 return
             
-            # Execute password update
+            # Update
             cursor.execute("UPDATE users SET password = ? WHERE id = ?", (new_password.value, user_data['id']))
             conn.commit()
             conn.close()
-
+            
             dialog_e.page.close(pwd_dialog)
-            show_success(dialog_e.page, "Password changed successfully!")
+            dialog_e.page.snack_bar = ft.SnackBar(content=ft.Text("Password changed successfully!"), bgcolor="primary")
+            dialog_e.page.snack_bar.open = True
             dialog_e.page.update()
         
         pwd_dialog = ft.AlertDialog(
@@ -220,39 +223,17 @@ def ProfileView():
         )
         e.page.open(pwd_dialog)
     
-    # Navigation Handlers
+    # Navigation Helpers
     def logout(e):
-        def confirm_logout(dialog_e):
-            show_success(dialog_e.page, "Logged out successfully!", duration=2)
-            AppState.set_user(None)
-            dialog_e.page.go("/")
-        
-        # Render logout confirmation modal
-        confirm_dialog = ft.AlertDialog(
-            modal=True,
-            title=ft.Row([
-                ft.Icon(ft.Icons.LOGOUT, color="error"),
-                ft.Text("Confirm Logout")
-            ]),
-            content=ft.Text("Are you sure you want to logout?", size=14),
-            actions=[
-                ft.TextButton("Cancel", on_click=lambda x: e.page.close(confirm_dialog)),
-                ft.ElevatedButton(
-                    "Logout",
-                    bgcolor="error",
-                    color="white",
-                    on_click=confirm_logout
-                ),
-            ],
-        )
-        e.page.open(confirm_dialog)
+        AppState.set_user(None)
+        e.page.go("/")
         
     def view_medical_records(e):
         e.page.go("/patient/prescriptions")
     
-    # Main View Implementation
+    # --- PAGE LAYOUT ---
     return ft.Column([
-        # Profile header section
+        # Profile Header Card
         ft.Container(
             content=ft.Row([
                 ft.Container(
@@ -267,7 +248,7 @@ def ProfileView():
                     txt_name_header,
                     txt_username_header,
                     ft.Container(
-                        content=ft.Text("Customer", size=12, weight="bold", color="onPrimaryContainer"),
+                        content=ft.Text("Patient", size=12, weight="bold", color="onPrimaryContainer"),
                         bgcolor="primaryContainer",
                         padding=ft.padding.symmetric(horizontal=12, vertical=4),
                         border_radius=15,
@@ -293,7 +274,7 @@ def ProfileView():
         ft.Text("Contact Information", size=20, weight="bold"),
         ft.Container(height=10),
         
-        # Contact information grid
+        # Info Grid
         ft.Row([
             ft.Column([
                 create_info_row("Email", txt_email, ft.Icons.EMAIL),
@@ -310,7 +291,7 @@ def ProfileView():
         ft.Divider(),
         ft.Container(height=10),
         
-        # Account management actions
+        # Account Actions List
         ft.Text("Account Actions", size=20, weight="bold"),
         ft.Container(height=10),
         

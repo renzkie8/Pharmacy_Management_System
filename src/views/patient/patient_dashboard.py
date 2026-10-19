@@ -7,40 +7,40 @@ from services.database import get_db_connection
 def PatientDashboard():
     """Main patient dashboard with live data from database."""
     
-    # Retrieve authenticated user session
+    # Get current logged-in user
     user = AppState.get_user()
     if not user:
         return ft.Text("Please log in first", color="error")
     
     user_id = user['id']
-    user_name = user['full_name'] if user.get('full_name') else "Customer"
+    user_name = user['full_name'] if user.get('full_name') else "Patient"
     
-    # Fetch dashboard statistics from database
+    # Fetch real data from database
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # Fetch active prescription metrics
+    # Get active prescriptions count
     cursor.execute("""
         SELECT COUNT(*) FROM prescriptions 
         WHERE patient_id = ? AND status IN ('Pending', 'Approved')
     """, (user_id,))
     active_prescriptions = cursor.fetchone()[0]
     
-    # Fetch pending order metrics
+    # Get pending orders count
     cursor.execute("""
         SELECT COUNT(*) FROM orders 
         WHERE patient_id = ? AND status IN ('Pending', 'Processing')
     """, (user_id,))
     pending_orders = cursor.fetchone()[0]
     
-    # Fetch completed order metrics
+    # Get completed orders count
     cursor.execute("""
         SELECT COUNT(*) FROM orders 
         WHERE patient_id = ? AND status = 'Completed'
     """, (user_id,))
     completed_orders = cursor.fetchone()[0]
     
-    # Fetch recent order activity
+    # Get recent orders (last 3)
     cursor.execute("""
         SELECT 
             o.id,
@@ -58,7 +58,7 @@ def PatientDashboard():
     """, (user_id,))
     recent_orders = cursor.fetchall()
     
-    # Fetch recent prescription updates
+    # Get recent prescriptions (last 2 for notifications)
     cursor.execute("""
         SELECT 
             p.id,
@@ -73,7 +73,7 @@ def PatientDashboard():
     """, (user_id,))
     recent_prescriptions = cursor.fetchall()
     
-    # Fetch low stock alerts
+    # Get low stock medicines (for patient awareness)
     cursor.execute("""
         SELECT name, stock
         FROM medicines
@@ -85,7 +85,7 @@ def PatientDashboard():
     
     conn.close()
     
-    # UI Component: Statistics Card
+    # Stats cards
     def create_stat_card(title, value, icon, color):
         return ft.Container(
             content=ft.Column([
@@ -109,7 +109,7 @@ def PatientDashboard():
             expand=True,
         )
     
-    # UI Component: Quick Action Button
+    # Quick action buttons
     def create_action_button(text, icon, route, color):
         return ft.ElevatedButton(
             content=ft.Row([
@@ -124,17 +124,17 @@ def PatientDashboard():
             ),
         )
     
-    # UI Component: Order List Item
+    # Order list item - with real data
     def create_order_item(order):
         order_id = order[0]
         status = order[1]
         items = order[4] if order[4] else "No items"
         
-        # Format item string length
+        # Truncate long item names
         if len(items) > 30:
             items = items[:27] + "..."
         
-        # Map order status to theme colors
+        # Status color mapping
         status_colors = {
             'Pending': 'tertiary',
             'Processing': 'secondary',
@@ -167,7 +167,7 @@ def PatientDashboard():
             border_radius=8,
         )
     
-    # UI Component: Notification Item
+    # Notification item - with real data
     def create_notification(title, time_str, icon, icon_color):
         return ft.Container(
             content=ft.Row([
@@ -182,7 +182,7 @@ def PatientDashboard():
             border_radius=8,
         )
     
-    # Render order timeline
+    # Build order list
     order_widgets = []
     if recent_orders:
         for order in recent_orders:
@@ -201,10 +201,10 @@ def PatientDashboard():
             )
         )
     
-    # Render notification feed
+    # Build notifications
     notification_widgets = []
     
-    # Append low stock warnings
+    # Add low stock alert first (if any)
     if low_stock_medicines:
         notification_widgets.append(
             ft.Container(
@@ -226,7 +226,7 @@ def PatientDashboard():
             )
         )
     
-    # Append prescription alerts
+    # Add prescription notifications
     if recent_prescriptions:
         for presc in recent_prescriptions:
             status = presc[1]
@@ -252,7 +252,7 @@ def PatientDashboard():
                     )
                 )
     
-    # Render empty state
+    # If no notifications at all
     if not notification_widgets:
         notification_widgets.append(
             ft.Container(
@@ -266,7 +266,7 @@ def PatientDashboard():
         )
     
     return ft.Column([
-        # Header section
+        # Welcome message
         ft.Container(
             content=ft.Row([
                 ft.Icon(ft.Icons.WAVING_HAND, color="tertiary", size=40),
@@ -286,7 +286,7 @@ def PatientDashboard():
             padding=20,
         ),
         
-        # KPI metric cards
+        # Stats row - REAL DATA
         ft.Row([
             create_stat_card(
                 "Active Prescriptions", 
@@ -310,7 +310,7 @@ def PatientDashboard():
         
         ft.Container(height=20),
         
-        # Fast navigation actions
+        # Quick actions
         ft.Container(
             content=ft.Column([
                 ft.Text("Quick Actions", size=20, weight="bold"),
@@ -344,9 +344,9 @@ def PatientDashboard():
         
         ft.Container(height=20),
         
-        # Activity feed and notifications panel
+        # Recent orders and notifications - REAL DATA
         ft.Row([
-            # Order history panel
+            # Recent Orders
             ft.Container(
                 content=ft.Column([
                     ft.Row([
@@ -367,7 +367,7 @@ def PatientDashboard():
                 height=300,
             ),
             
-            # Notification panel
+            # Notifications
             ft.Container(
                 content=ft.Column([
                     ft.Text("Notifications", size=20, weight="bold"),

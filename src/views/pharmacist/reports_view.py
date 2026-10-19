@@ -5,7 +5,6 @@ from datetime import datetime, timedelta
 from services.database import get_db_connection
 from state.app_state import AppState
 from components.navigation_header import NavigationHeader
-from utils.notifications import show_success, show_error
 
 def ReportsView():
     """Generate and view pharmacist reports."""
@@ -214,10 +213,9 @@ def ReportsView():
                     ),
                 ], spacing=10),
             ])
-
+            
             e.page.update()
-            show_success(e.page, f"Report generated successfully!")
-
+            
         except Exception as ex:
             report_container.controls.append(
                 ft.Container(
@@ -229,7 +227,6 @@ def ReportsView():
                     padding=50,
                 )
             )
-            show_error(e.page, "Failed to generate report")
             conn.close()
             e.page.update()
     

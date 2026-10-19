@@ -12,7 +12,7 @@ def InvoicesListView():
     user = AppState.get_user()
     invoices_container = ft.Column(spacing=10)
     
-    # Initialize filter components
+    # --- FILTERS ---
     status_filter = ft.Dropdown(
         label="Status",
         options=[
@@ -58,13 +58,13 @@ def InvoicesListView():
     )
     
     search_field = ft.TextField(
-        hint_text="Search by invoice #, customer name...",
+        hint_text="Search by invoice #, patient name...",
         prefix_icon=ft.Icons.SEARCH,
         border_color="primary",
         expand=True,
     )
     
-    # Query execution function
+    # --- DB FUNCTION ---
     def get_invoices_from_db(status="All", payment_method="All", date_start="", date_end="", search=""):
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -109,7 +109,7 @@ def InvoicesListView():
         
         return results
     
-    # Render comprehensive invoice card
+    # --- CARD CREATOR ---
     def create_invoice_card(inv):
         inv_id, inv_number, total, status, created_at, payment_method, payment_date, subtotal, tax, discount, patient_name, patient_id = inv
         
@@ -125,14 +125,14 @@ def InvoicesListView():
         
         return ft.Container(
             content=ft.Column([
-                # Detail view card header
+                # Header
                 ft.Row([
                     ft.Column([
                         ft.Row([
                             ft.Icon(ft.Icons.RECEIPT, color="primary", size=20),
                             ft.Text(f"Invoice #{inv_number}", size=16, weight="bold"),
                         ], spacing=5),
-                        ft.Text(f"Customer: {patient_name} (ID: {patient_id})", size=13, color="outline"),
+                        ft.Text(f"Patient: {patient_name} (ID: {patient_id})", size=13, color="outline"),
                     ], spacing=2, expand=True),
                     ft.Container(
                         content=ft.Text(status, size=12, weight="bold", color="white"),
@@ -144,7 +144,7 @@ def InvoicesListView():
                 
                 ft.Divider(height=10),
                 
-                # Financial aggregation metrics
+                # Totals
                 ft.Row([
                     ft.Column([
                         ft.Text("Subtotal", size=11, color="outline"),
@@ -155,10 +155,6 @@ def InvoicesListView():
                         ft.Text(f"₱{tax:,.2f}", size=14, weight="bold"),
                     ], spacing=2),
                     ft.Column([
-                        ft.Text("Discount", size=11, color="outline"),
-                        ft.Text(f"-₱{discount:,.2f}", size=14, weight="bold", color="error"),
-                    ], spacing=2) if discount > 0 else ft.Container(),
-                    ft.Column([
                         ft.Text("Total", size=11, color="outline"),
                         ft.Text(f"₱{total:,.2f}", size=16, weight="bold", color="primary"),
                     ], spacing=2),
@@ -166,7 +162,7 @@ def InvoicesListView():
                 
                 ft.Container(height=5),
                 
-                # Meta transaction timestamps
+                # Payment Date info
                 ft.Container(
                     content=ft.Row([
                         ft.Icon(ft.Icons.CHECK_CIRCLE, size=14, color="primary"),
@@ -178,7 +174,7 @@ def InvoicesListView():
                     border_radius=5,
                 ),
                 
-                # Invoice operational buttons
+                # Buttons
                 ft.Row([
                     ft.ElevatedButton(
                         "View Details",
@@ -188,7 +184,7 @@ def InvoicesListView():
                         on_click=lambda e, inv_id=inv_id: view_invoice_detail(e, inv_id),
                     ),
                     
-                    # Update payment state
+                    # Mark as Paid
                     ft.OutlinedButton(
                         "Mark as Paid",
                         icon=ft.Icons.PAYMENT,
@@ -196,7 +192,7 @@ def InvoicesListView():
                         on_click=lambda e, inv_id=inv_id: mark_as_paid(e, inv_id),
                     ),
                     
-                    # Update cancellation state
+                    # Cancel Button
                     ft.TextButton(
                         "Cancel Invoice",
                         icon=ft.Icons.DELETE,
@@ -213,7 +209,7 @@ def InvoicesListView():
             bgcolor="surface",
         )
     
-    # Helper callback functions
+    # --- HELPERS ---
     def view_invoice_detail(e, inv_id):
         e.page.go(f"/billing/invoice/{inv_id}")
     
@@ -247,7 +243,7 @@ def InvoicesListView():
         
         load_invoices(e)
     
-    # Populate invoice lists
+    # --- LOAD INVOICES ---
     def load_invoices(e=None):
         invoices_container.controls.clear()
         
@@ -277,7 +273,7 @@ def InvoicesListView():
             for inv in invoices:
                 invoices_container.controls.append(create_invoice_card(inv))
         else:
-            # Display empty state
+            # Centered empty state
             invoices_container.controls.append(
                 ft.Container(
                     content=ft.Column([
@@ -290,14 +286,14 @@ def InvoicesListView():
                 )
             )
         
-        # Trigger isolated component updates
+        # Only update the page if an event 'e' exists
         if e: 
             e.page.update()
     
-    # Inject arbitrary default for bootstrapping
+    # FIX: Pass 'None' for initial load instead of a Fake class
     load_invoices(None)
     
-    # Render primary structure
+    # --- PAGE LAYOUT ---
     return ft.Column([
         NavigationHeader(
             "All Invoices",
@@ -307,7 +303,7 @@ def InvoicesListView():
         
         ft.Container(
             content=ft.Column([
-                # Initialize call to action
+                # Create Button
                 ft.Row([
                     ft.ElevatedButton(
                         "Create New Invoice",
@@ -320,7 +316,7 @@ def InvoicesListView():
                 
                 ft.Container(height=20),
                 
-                # Form parameter constraints
+                # Filters
                 ft.Text("Filter Invoices", size=20, weight="bold"),
                 
                 ft.Row([
@@ -330,7 +326,7 @@ def InvoicesListView():
                     date_to,
                 ], spacing=10, wrap=True),
                 
-                # Global search lookup
+                # Search Bar
                 ft.Row([
                     search_field,
                     ft.ElevatedButton(
@@ -344,7 +340,7 @@ def InvoicesListView():
                 
                 ft.Divider(height=30),
                 
-                # Render main list view
+                # The List
                 invoices_container,
             ], spacing=15),
             padding=20,

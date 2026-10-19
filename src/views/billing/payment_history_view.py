@@ -11,8 +11,8 @@ def PaymentHistoryView():
     
     payments_container = ft.Column(spacing=10)
     
-    # Initialize filtering components
-    # Apply theme border configuration
+    # --- FILTERS ---
+    # FIX: Changed border_color to "primary" for dark mode visibility
     payment_method_filter = ft.Dropdown(
         label="Payment Method",
         options=[
@@ -33,24 +33,24 @@ def PaymentHistoryView():
         label="From Date", 
         value=(datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d"), 
         width=150, 
-        border_color="primary" # Apply theme border
+        border_color="primary" # Dark Mode Fix
     )
     
     date_to = ft.TextField(
         label="To Date", 
         value=datetime.now().strftime("%Y-%m-%d"), 
         width=150, 
-        border_color="primary" # Apply theme border
+        border_color="primary" # Dark Mode Fix
     )
     
     search_field = ft.TextField(
-        hint_text="Search by invoice #, customer name...", 
+        hint_text="Search by invoice #, patient name...", 
         prefix_icon=ft.Icons.SEARCH, 
-        border_color="primary", # Apply theme border
+        border_color="primary", # Dark Mode Fix
         expand=True
     )
     
-    # Query transaction records
+    # --- DB FUNCTION ---
     def get_payments_from_db(payment_method="All", date_start="", date_end="", search=""):
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -88,7 +88,7 @@ def PaymentHistoryView():
         conn.close()
         return results
     
-    # Render transaction component
+    # --- CARD CREATOR ---
     def create_payment_card(payment):
         inv_id, inv_number, amount, payment_method, payment_date, created_at, patient_name, clerk_name = payment
         
@@ -112,7 +112,7 @@ def PaymentHistoryView():
                 ft.Divider(height=10),
                 
                 ft.Row([
-                    ft.Column([ft.Text("Customer", size=11, color="outline"), ft.Text(patient_name, size=14, weight="bold")], spacing=2),
+                    ft.Column([ft.Text("Patient", size=11, color="outline"), ft.Text(patient_name, size=14, weight="bold")], spacing=2),
                     ft.VerticalDivider(width=20),
                     ft.Column([ft.Text("Processed By", size=11, color="outline"), ft.Text(clerk_name or "System", size=14, weight="bold")], spacing=2),
                     ft.VerticalDivider(width=20),
@@ -129,7 +129,7 @@ def PaymentHistoryView():
             bgcolor="surface",
         )
     
-    # Populate view list
+    # --- LOAD PAYMENTS ---
     def load_payments(e=None):
         payments_container.controls.clear()
         
@@ -160,7 +160,7 @@ def PaymentHistoryView():
             for payment in payments:
                 payments_container.controls.append(create_payment_card(payment))
         else:
-            # Display empty state
+            # Centered empty state
             payments_container.controls.append(
                 ft.Container(
                     content=ft.Column([
@@ -175,27 +175,27 @@ def PaymentHistoryView():
         
         if e and hasattr(e, 'page'): e.page.update()
     
-    # Initial component mount
+    # Initial load
     load_payments(None)
     
-    # Render primary structure
+    # --- PAGE LAYOUT ---
     return ft.Column([
-        # Hide navigation back
+        # Back button removed
         NavigationHeader("Payment History", "View all payment transactions and revenue", show_back=False),
         
         ft.Container(
             content=ft.Column([
-                # Form parameter constraints
+                # Filters
                 ft.Text("Filter Payments", size=20, weight="bold"),
                 ft.Row([payment_method_filter, date_from, date_to], spacing=10, wrap=True),
                 
                 ft.Row([
                     search_field,
                     ft.ElevatedButton("Apply Filters", icon=ft.Icons.FILTER_ALT, bgcolor="primary", color="white", on_click=load_payments),
-                    # Ensure standard controls
+                    # FIX: Refresh button removed
                 ], spacing=10),
                 
-                # Ensure simplified layout
+                # Export buttons removed completely as requested
                 
                 ft.Divider(height=30),
                 payments_container,

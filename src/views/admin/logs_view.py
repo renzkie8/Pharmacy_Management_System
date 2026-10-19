@@ -21,7 +21,7 @@ def SystemLogs():
         ],
         value="all",
         width=250,
-        border_color="primary", # Adjust visibility parameter
+        border_color="primary", # Dark mode fix
     )
     
     date_filter = ft.Dropdown(
@@ -34,13 +34,13 @@ def SystemLogs():
         ],
         value="week",
         width=200,
-        border_color="primary", # Adjust visibility parameter
+        border_color="primary", # Dark mode fix
     )
     
     search_field = ft.TextField(
         hint_text="Search logs...",
         prefix_icon=ft.Icons.SEARCH,
-        border_color="primary", # Adjust visibility parameter
+        border_color="primary", # Dark mode fix
         width=300,
     )
     
@@ -51,7 +51,7 @@ def SystemLogs():
         
         logs = []
         
-        # Query system registration volume
+        # 1. Get user registrations
         cursor.execute("""
             SELECT id, username, full_name, role, created_at
             FROM users
@@ -64,14 +64,14 @@ def SystemLogs():
             logs.append({
                 "timestamp": user[4],
                 "user": user[1],
-                "action": f"New {'Customer' if user[3] == 'Patient' else user[3]} Registered",
+                "action": f"New {user[3]} Registered",
                 "details": f"User '{user[2] or user[1]}' created account",
                 "type": "users",
                 "icon": ft.Icons.PERSON_ADD,
                 "color": "primary",
             })
         
-        # Query system prescription volume
+        # 2. Get prescription activities
         cursor.execute("""
             SELECT p.id, p.status, p.created_at, u.username, u.full_name
             FROM prescriptions p
@@ -96,7 +96,7 @@ def SystemLogs():
                 "color": color,
             })
         
-        # Query commerce operations volume
+        # 3. Get order activities
         cursor.execute("""
             SELECT o.id, o.status, o.order_date, o.total_amount, u.username, u.full_name
             FROM orders o
@@ -120,7 +120,7 @@ def SystemLogs():
                 "color": color,
             })
         
-        # Query inventory modifications
+        # 4. Get inventory changes (medicines added/updated recently)
         cursor.execute("""
             SELECT id, name, stock, created_at
             FROM medicines
@@ -140,7 +140,7 @@ def SystemLogs():
                 "color": "secondary",
             })
         
-        # Query billing generation activity
+        # 5. Get invoice activities
         cursor.execute("""
             SELECT i.id, i.invoice_number, i.total_amount, i.status, i.created_at, u.username
             FROM invoices i
@@ -161,7 +161,7 @@ def SystemLogs():
                 "color": "tertiary",
             })
             
-        # Query system action audit table
+        # 6. Real Activity Logs (If available in DB)
         try:
             cursor.execute("""
                 SELECT timestamp, user_id, action, details 
@@ -185,14 +185,14 @@ def SystemLogs():
         
         conn.close()
         
-        # Enforce reverse chronological order
+        # Sort all logs by timestamp (most recent first)
         logs.sort(key=lambda x: x['timestamp'], reverse=True)
         
         return logs
     
     def create_log_entry(log):
         """Create a log entry card."""
-        # Determine relative elapsed time
+        # Format time nicely
         try:
             log_time = datetime.strptime(log['timestamp'], "%Y-%m-%d %H:%M:%S")
             time_ago = get_time_ago(log_time)
@@ -233,7 +233,7 @@ def SystemLogs():
             padding=15,
             border=ft.border.all(1, "outlineVariant"),
             border_radius=10,
-            bgcolor="surface", # Adjust visibility parameter
+            bgcolor="surface", # Dark mode fix
         )
     
     def get_time_ago(log_time):
@@ -308,7 +308,7 @@ def SystemLogs():
             
             all_logs = filtered_logs
         
-        # Execute client-side fuzzy search filter
+        # Filter by search
         if search_query:
             all_logs = [
                 log for log in all_logs
@@ -317,7 +317,7 @@ def SystemLogs():
                 or search_query in log['user'].lower()
             ]
         
-        # Conditional empty state rendering
+        # Display logs
         if all_logs:
             logs_container.controls.append(
                 ft.Text(
@@ -346,7 +346,7 @@ def SystemLogs():
         if e:
             e.page.update()
     
-    # Initialize primary component state
+    # Initial load
     class FakePage:
         dialog = None
         snack_bar = None

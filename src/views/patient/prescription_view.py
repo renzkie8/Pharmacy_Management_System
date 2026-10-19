@@ -4,19 +4,18 @@ import flet as ft
 from state.app_state import AppState
 from services.database import get_db_connection
 from datetime import datetime
-from utils.notifications import show_success, show_error
 
 def PatientPrescriptionsView():
     """View patient's own prescriptions and submit new ones."""
     
-    # Authenticate user session
+    # 1. First, we get the current user to know who is logged in
     user = AppState.get_user()
     
-    # Connect to active database
+    # 2. Connect to the database to get the history
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # Query existing prescriptions
+    # We select the specific columns we need for the list
     cursor.execute("""
         SELECT id, status, notes, created_at 
         FROM prescriptions 
@@ -27,7 +26,7 @@ def PatientPrescriptionsView():
     prescriptions = cursor.fetchall()
     conn.close()
     
-    # Render prescription card component
+    # This helper function creates the colorful card for each prescription in the list
     def create_prescription_card(rx):
         # Define colors for different statuses
         status_colors = {
@@ -73,24 +72,24 @@ def PatientPrescriptionsView():
             bgcolor=ft.Colors.with_opacity(0.05, color),
         )
     
-    # New Prescription Form
+    # --- LOGIC FOR THE "NEW PRESCRIPTION" POPUP ---
     def submit_prescription_dialog(e):
         
-        # Fetch active inventory
+        # Get list of available medicines for dropdown
         conn_med = get_db_connection()
         cursor_med = conn_med.cursor()
         cursor_med.execute("SELECT id, name FROM medicines WHERE stock > 0 ORDER BY name")
         available_medicines = cursor_med.fetchall()
         conn_med.close()
         
-        # Fetch active medical staff
+        # Get list of doctors/pharmacists for dropdown
         conn_doc = get_db_connection()
         cursor_doc = conn_doc.cursor()
         cursor_doc.execute("SELECT id, full_name FROM users WHERE role IN ('Pharmacist', 'Doctor', 'Staff') ORDER BY full_name")
         available_doctors = cursor_doc.fetchall()
         conn_doc.close()
         
-        # Form input generator
+        # A helper to make all input fields look the same
         def create_input(label, multiline=False, keyboard_type=None):
             return ft.TextField(
                 label=label,
@@ -124,24 +123,22 @@ def PatientPrescriptionsView():
         duration = create_input("Duration (in days) *", keyboard_type=ft.KeyboardType.NUMBER)
         additional_notes = create_input("Additional Notes", multiline=True)
         
-        # Error feedback node
+        # A hidden text field for showing error messages
         error_text = ft.Text("", color="error", size=12)
         
-        # Submission execution handler
+        # The logic that runs when "Submit" is clicked
         def save_prescription(dialog_e):
-            # Validate required fields
+            # 1. Validation: Check if required fields are empty
             if not all([doctor_dropdown.value, medicine_dropdown.value, dosage.value, frequency.value, duration.value]):
                 error_text.value = "Please fill in all required fields!"
-                show_error(dialog_e.control.page, "Please fill in all required fields!")
                 dialog_e.control.page.update()
                 return
-
-            # Enforce numerical bounds
+            
+            # 2. Validation: Check if duration is actually a number
             try:
                 duration_days = int(duration.value)
             except:
                 error_text.value = "Duration must be a number (days)"
-                show_error(dialog_e.control.page, "Duration must be a number!")
                 dialog_e.control.page.update()
                 return
             
@@ -149,7 +146,7 @@ def PatientPrescriptionsView():
                 conn = get_db_connection()
                 cursor = conn.cursor()
                 
-                # Map selected physician
+                # Get the selected doctor's name from the dropdown
                 doctor_id = int(doctor_dropdown.value)
                 cursor.execute("SELECT full_name FROM users WHERE id = ?", (doctor_id,))
                 doctor_result = cursor.fetchone()
@@ -163,11 +160,12 @@ def PatientPrescriptionsView():
                 medicine_result = cursor.fetchone()
                 medicine_name = medicine_result[0] if medicine_result else "Unknown Medicine"
                 
-                # Construct legacy annotation string
+                # Create a combined note string for legacy support
                 notes_text = f"Doctor: {doctor_name}\nMedicine: {medicine_name}\nDosage: {dosage.value}\nFrequency: {frequency.value}\nDuration: {duration_days} days\nNotes: {additional_notes.value or 'None'}"
                 
-                # Write structured fields
-                # Ensure dimensional parameters correctly route to respective independent schema columns
+                # --- FIX: INSERT CORRECT DATA ---
+                # We are explicitly inserting dosage, frequency, duration, and doctor_name
+                # into their specific columns so they don't get mixed up.
                 cursor.execute("""
                     INSERT INTO prescriptions 
                     (patient_id, medicine_id, status, notes, created_at, dosage, frequency, duration, doctor_name)
@@ -185,23 +183,27 @@ def PatientPrescriptionsView():
                 
                 conn.commit()
                 conn.close()
-
-                # Dismiss modal dialog
+                
+                # Close the popup
                 dialog_e.control.page.close(prescription_form)
-
-                # Trigger confirmation toast
-                show_success(dialog_e.control.page, "Prescription submitted! Waiting for review.")
-
-                # Execute navigation reset
+                
+                # Show success message
+                dialog_e.control.page.snack_bar = ft.SnackBar(
+                    content=ft.Text("Prescription submitted! Waiting for review."),
+                    bgcolor="primary"
+                )
+                dialog_e.control.page.snack_bar.open = True
+                dialog_e.control.page.update()
+                
+                # Reload the page to show the new item
                 dialog_e.control.page.go("/patient/prescriptions")
                 
             except Exception as ex:
-                # Handle execution failure
+                # If something crashes, show the error
                 error_text.value = f"Error: {str(ex)}"
-                show_error(dialog_e.control.page, "Failed to submit prescription")
                 dialog_e.control.page.update()
 
-        # View Structure Modal
+        # The actual Dialog Window UI
         prescription_form = ft.AlertDialog(
             modal=True,
             title=ft.Row([
@@ -239,10 +241,10 @@ def PatientPrescriptionsView():
             actions_padding=20,
         )
         
-        # Reveal modal layer
+        # Open the dialog
         e.page.open(prescription_form)
 
-    # Render Primary Screen
+    # --- MAIN PAGE LAYOUT ---
     return ft.Column([
         # The top header section
         ft.Row([
@@ -294,14 +296,11 @@ def PatientPrescriptionsView():
             create_prescription_card(rx) for rx in prescriptions
         ], spacing=10) if prescriptions else ft.Container(
             content=ft.Column([
-        ft.Icon(ft.Icons.DESCRIPTION_OUTLINED, size=100, color="outline"),
-        ft.Container(height=20),
-        ft.Text("No prescriptions yet", size=20, weight="bold", color="outline"),
-        ft.Container(height=10),
-        ft.Text("To get started, click the 'Submit Prescription' button above", 
-               size=14, color="outline", text_align=ft.TextAlign.CENTER),
-    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=5),
-    padding=80,
-    alignment=ft.alignment.center,
+                ft.Icon(ft.Icons.DESCRIPTION_OUTLINED, size=80, color="outline"),
+                ft.Text("No prescriptions yet", size=18, color="outline"),
+                ft.Text("Click the button above to submit one!", size=14, color="outline"),
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
+            padding=50,
+            alignment=ft.alignment.center,
         ),
     ], scroll=ft.ScrollMode.AUTO, spacing=0)

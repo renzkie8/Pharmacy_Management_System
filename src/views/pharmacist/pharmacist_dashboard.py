@@ -12,16 +12,16 @@ def PharmacistDashboard():
     user = AppState.get_user()
     user_name = user['full_name'] if user else "Pharmacist"
     
-    # Fetch dashboard statistics
+    # Get statistics from database
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # Metric: Pending Prescriptions
+    # Count pending prescriptions
     cursor.execute("SELECT COUNT(*) FROM prescriptions WHERE status = 'Pending'")
     result = cursor.fetchone()
     pending_rx = result[0] if result else 0
     
-    # Metric: Today's Approved Prescriptions
+    # Count approved prescriptions today
     cursor.execute("""
         SELECT COUNT(*) FROM prescriptions 
         WHERE status = 'Approved' 
@@ -30,17 +30,17 @@ def PharmacistDashboard():
     result = cursor.fetchone()
     approved_rx = result[0] if result else 0
     
-    # Metric: Total Patient Count
+    # Count total patients
     cursor.execute("SELECT COUNT(*) FROM users WHERE role = 'Patient'")
     result = cursor.fetchone()
     total_patients = result[0] if result else 0
     
-    # Metric: Valid Inventory Items
+    # Count medicines in stock
     cursor.execute("SELECT COUNT(*) FROM medicines WHERE stock > 0")
     result = cursor.fetchone()
     medicines_available = result[0] if result else 0
     
-    # Fetch pending prescription details
+    # Get pending prescriptions with patient info
     cursor.execute("""
         SELECT p.id, p.created_at, p.status,
                u.full_name as patient_name,
@@ -54,7 +54,7 @@ def PharmacistDashboard():
     """)
     pending_prescriptions = cursor.fetchall()
     
-    # Fetch recent activity history
+    # Get recent activity from activity_log
     cursor.execute("""
         SELECT action, details, timestamp
         FROM activity_log
@@ -64,7 +64,7 @@ def PharmacistDashboard():
     """, (user['id'],))
     recent_activities = cursor.fetchall()
     
-    # Fetch inventory shortage alerts
+    # Get low stock alerts
     cursor.execute("""
         SELECT name, stock
         FROM medicines
@@ -76,7 +76,7 @@ def PharmacistDashboard():
     
     conn.close()
     
-    # UI Component: Statistics Card
+    # Helper: Create stat card
     def create_stat_card(title, value, icon, color, subtitle=""):
         return ft.Container(
             content=ft.Column([
@@ -102,7 +102,7 @@ def PharmacistDashboard():
             height=140,
         )
     
-    # UI Component: Quick Action Button
+    # Helper: Create quick action button
     def create_action_button(text, icon, route, color):
         return ft.ElevatedButton(
             content=ft.Row([
@@ -117,7 +117,7 @@ def PharmacistDashboard():
             ),
         )
     
-    # Utility: Relative Time Formatter
+    # Helper: Format time ago
     def time_ago(timestamp_str):
         try:
             timestamp = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
@@ -137,13 +137,13 @@ def PharmacistDashboard():
         except:
             return timestamp_str
     
-    # UI Component: Prescription Queue Item
+    # Helper: Create prescription item
     def create_prescription_item(rx):
         return ft.Container(
             content=ft.Row([
                 ft.Column([
                     ft.Text(f"Prescription #{rx[0]}", weight="bold", size=14),
-                    ft.Text(f"Customer: {rx[3]}", size=12, color="outline"),
+                    ft.Text(f"Patient: {rx[3]}", size=12, color="outline"),
                     ft.Text(f"Medicine: {rx[4]}", size=12),
                     ft.Text(f"Submitted: {time_ago(rx[1])}", size=11, color="outline", italic=True),
                 ], spacing=3, expand=True),
@@ -166,7 +166,7 @@ def PharmacistDashboard():
             bgcolor="surface",
         )
     
-    # UI Component: Alert Notification Item
+    # Helper: Create alert item
     def create_alert_item(message, icon, color):
         return ft.Container(
             content=ft.Row([
@@ -179,7 +179,7 @@ def PharmacistDashboard():
             bgcolor=ft.Colors.with_opacity(0.05, color),
         )
     
-    # UI Component: Activity Log Item
+    # Helper: Create activity item
     def create_activity_item(action, details, timestamp):
         action_icons = {
             'prescription_approved': '✓',
@@ -195,7 +195,7 @@ def PharmacistDashboard():
             color="outline",
         )
     
-    # Render pending prescriptions queue
+    # Build pending prescriptions list
     pending_rx_widgets = []
     if pending_prescriptions:
         for rx in pending_prescriptions:
@@ -212,7 +212,7 @@ def PharmacistDashboard():
             )
         )
     
-    # Render activity timeline
+    # Build recent activity list
     activity_widgets = []
     if recent_activities:
         for activity in recent_activities:
@@ -222,13 +222,13 @@ def PharmacistDashboard():
             ft.Text("No recent activity", size=12, color="outline", italic=True)
         )
     
-    # Render system alerts panel
+    # Build alerts
     alert_widgets = []
     
-    # Inventory shortage warnings
+    # Low stock alerts - REAL COUNT
     low_stock_count = len(low_stock_medicines)
     if low_stock_count > 0:
-        # Display aggregate count
+        # Show actual count
         alert_widgets.append(
             create_alert_item(
                 f"{low_stock_count} medicine(s) are low in stock",
@@ -237,7 +237,7 @@ def PharmacistDashboard():
             )
         )
         
-        # Display specific items
+        # Show the actual medicines
         for med in low_stock_medicines[:5]:  # Show top 5
             alert_widgets.append(
                 ft.Container(
@@ -251,7 +251,7 @@ def PharmacistDashboard():
                 )
             )
     
-    # Prescription backlog warnings
+    # Pending prescriptions alert - REAL COUNT
     if pending_rx > 5:
         alert_widgets.append(
             create_alert_item(
@@ -269,7 +269,7 @@ def PharmacistDashboard():
             )
         )
     
-    # Empty state mapping
+    # If no alerts
     if not alert_widgets:
         alert_widgets.append(
             create_alert_item(
@@ -280,7 +280,7 @@ def PharmacistDashboard():
         )
     
     return ft.Column([
-        # Primary Navigation Header
+        # Navigation header (no back button on dashboard - it's the home page)
         NavigationHeader(
             f"Welcome, {user_name}",
             "Pharmacist Dashboard - Review and validate prescriptions",
@@ -288,7 +288,7 @@ def PharmacistDashboard():
             show_forward=False,
         ),
         
-        # KPI metrics section
+        # Statistics cards
         ft.Row([
             create_stat_card(
                 "Pending Reviews",
@@ -305,7 +305,7 @@ def PharmacistDashboard():
                 "This shift"
             ),
             create_stat_card(
-                "Total Customers",
+                "Total Patients",
                 total_patients,
                 ft.Icons.PEOPLE,
                 "secondary",
@@ -320,7 +320,7 @@ def PharmacistDashboard():
         
         ft.Container(height=20),
         
-        # Fast navigation shortcuts
+        # Quick actions
         ft.Container(
             content=ft.Column([
                 ft.Text("Quick Actions", size=20, weight="bold"),
@@ -343,12 +343,6 @@ def PharmacistDashboard():
                         "/pharmacist/reports",
                         "tertiary",
                     ),
-                    create_action_button(
-                        "Verify Orders",
-                        ft.Icons.VERIFIED,
-                        "/staff/orders",
-                        "primary",
-                    ),
                 ], spacing=15, wrap=True),
             ], spacing=15),
             padding=20,
@@ -359,9 +353,9 @@ def PharmacistDashboard():
         
         ft.Container(height=20),
         
-        # Main dashboard grid
+        # Main content area
         ft.Row([
-            # Prescriptions queue panel
+            # Pending prescriptions
             ft.Container(
                 content=ft.Column([
                     ft.Row([
@@ -385,7 +379,7 @@ def PharmacistDashboard():
                 expand=2,
             ),
             
-            # System alerts panel
+            # Alerts and notifications
             ft.Container(
                 content=ft.Column([
                     ft.Row([

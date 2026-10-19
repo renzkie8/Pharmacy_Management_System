@@ -5,15 +5,14 @@ from datetime import datetime, timedelta
 from services.database import get_db_connection
 from state.app_state import AppState
 from components.navigation_header import NavigationHeader
-from utils.notifications import show_success, show_error
 
 def BillingReportsView():
     """Comprehensive billing reports and overall situation analysis."""
     
-    # Initialize primary report container
+    # This container holds all the report sections (Summary, Tables, Analysis)
     report_container = ft.Column(spacing=20)
     
-    # Default reporting interval
+    # Default dates (Last 30 days)
     date_from = ft.TextField(
         label="From Date",
         value=(datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d"),
@@ -28,7 +27,7 @@ def BillingReportsView():
         border_color="outline",
     )
     
-    # Render KPI metric component
+    # --- UI HELPERS (Small Cards) ---
     def create_metric_card(title, value, icon, color):
         return ft.Container(
             content=ft.Column([
@@ -43,7 +42,7 @@ def BillingReportsView():
             width=200,
         )
     
-    # Render revenue metric component
+    # --- UI HELPERS (Wide Revenue Cards) ---
     def create_revenue_card(title, amount, color):
         return ft.Container(
             content=ft.Column([
@@ -57,12 +56,12 @@ def BillingReportsView():
             width=250,
         )
     
-    # Report generation handler
+    # --- MAIN REPORT GENERATION LOGIC ---
     def generate_report(e):
-        # Clear previous render state
+        # Clear the previous report so we don't stack them
         report_container.controls.clear()
         
-        # Display loading indicator
+        # Show a loading ring while we fetch data
         report_container.controls.append(ft.ProgressRing())
         e.page.update()
         
@@ -73,7 +72,7 @@ def BillingReportsView():
             date_start = date_from.value
             date_end = date_to.value
             
-            # Query aggregated financial metrics
+            # 1. GET OVERALL SUMMARY STATS
             cursor.execute("""
                 SELECT 
                     COUNT(*) as total_invoices,
@@ -90,7 +89,7 @@ def BillingReportsView():
             summary = cursor.fetchone()
             total_invoices, paid_count, unpaid_count, cancelled_count, total_revenue, pending_revenue, avg_invoice = summary
             
-            # Query transaction distribution
+            # 2. GET PAYMENT METHODS BREAKDOWN
             cursor.execute("""
                 SELECT payment_method, 
                        COUNT(*) as count,
@@ -103,7 +102,7 @@ def BillingReportsView():
             """, (date_start, date_end))
             payment_methods = cursor.fetchall()
             
-            # Query top revenue contributors
+            # 3. GET TOP PATIENTS BY SPENDING
             cursor.execute("""
                 SELECT u.full_name,
                        COUNT(i.id) as invoice_count,
@@ -119,10 +118,10 @@ def BillingReportsView():
             
             conn.close()
             
-            # Construct report interface
-            report_container.controls.clear()
+            # --- START BUILDING THE UI ---
+            report_container.controls.clear() # Remove loading ring
             
-            # Render executive summary
+            # SECTION 1: OVERALL SITUATION
             report_container.controls.append(ft.Text("📊 Overall Billing Situation", size=24, weight="bold"))
             
             report_container.controls.append(
@@ -131,7 +130,7 @@ def BillingReportsView():
                         ft.Text(f"Period: {date_start} to {date_end}", size=14, color="outline"),
                         ft.Divider(height=15),
                         
-                        # Render volume metrics
+                        # Row of Counts
                         ft.Row([
                             create_metric_card("Total Invoices", total_invoices, ft.Icons.RECEIPT, "primary"),
                             create_metric_card("Paid", paid_count, ft.Icons.CHECK_CIRCLE, "primary"),
@@ -141,7 +140,7 @@ def BillingReportsView():
                         
                         ft.Container(height=15),
                         
-                        # Render financial metrics
+                        # Row of Money
                         ft.Row([
                             create_revenue_card("Total Revenue", total_revenue, "primary"),
                             create_revenue_card("Pending Revenue", pending_revenue, "error"),
@@ -155,7 +154,7 @@ def BillingReportsView():
                 )
             )
             
-            # Render payment distribution table
+            # SECTION 2: PAYMENT METHODS (The Table)
             report_container.controls.append(ft.Text("💳 Payment Methods Breakdown", size=20, weight="bold"))
             
             payment_rows = [
@@ -189,12 +188,12 @@ def BillingReportsView():
                 )
             )
             
-            # Render top patients table
-            report_container.controls.append(ft.Text("👥 Top 10 Customers by Billing", size=20, weight="bold"))
+            # SECTION 3: TOP PATIENTS (The Table)
+            report_container.controls.append(ft.Text("👥 Top 10 Patients by Billing", size=20, weight="bold"))
             
             patient_rows = [
                 ft.Row([
-                    ft.Text("Customer Name", weight="bold", expand=True),
+                    ft.Text("Patient Name", weight="bold", expand=True),
                     ft.Text("Invoices", weight="bold", width=100),
                     ft.Text("Total Spent", weight="bold", width=150),
                 ]),
@@ -211,7 +210,7 @@ def BillingReportsView():
                         ])
                     )
             else:
-                patient_rows.append(ft.Text("No customer data available.", italic=True))
+                patient_rows.append(ft.Text("No patient data available.", italic=True))
                 
             report_container.controls.append(
                 ft.Container(
@@ -223,10 +222,10 @@ def BillingReportsView():
                 )
             )
             
-            # Render collection efficiency metrics
+            # SECTION 4: COLLECTION ANALYSIS
             report_container.controls.append(ft.Text("📊 Collection Analysis", size=20, weight="bold"))
             
-            # Compute collection rates securely
+            # Calculate percentages avoiding division by zero
             collection_rate = (paid_count / total_invoices * 100) if total_invoices > 0 else 0
             revenue_collection = (total_revenue / (total_revenue + pending_revenue) * 100) if (total_revenue + pending_revenue) > 0 else 0
             
@@ -253,21 +252,19 @@ def BillingReportsView():
                     border=ft.border.all(1, "primary"),
                 )
             )
-
+            
             e.page.update()
-            show_success(e.page, f"Report generated successfully!")
-
+            
         except Exception as ex:
-            # Handle generation failure
+            # Handle errors gracefully
             report_container.controls.clear()
             report_container.controls.append(ft.Text(f"Error generating report: {str(ex)}", color="error"))
-            show_error(e.page, "Failed to generate report")
             if conn: conn.close()
             e.page.update()
     
-    # Render primary structure
+    # --- PAGE LAYOUT ---
     return ft.Column([
-        # Configure navigation parameters
+        # FIXED: Removed the back button (show_back=False)
         NavigationHeader(
             "Billing Reports",
             "View overall billing situation and analytics",
@@ -276,7 +273,7 @@ def BillingReportsView():
         
         ft.Container(
             content=ft.Column([
-                # Render parameter controls
+                # Filters
                 ft.Row([
                     ft.Icon(ft.Icons.DATE_RANGE, color="primary", size=28),
                     ft.Text("Select Report Period", size=20, weight="bold"),
@@ -297,7 +294,7 @@ def BillingReportsView():
                 
                 ft.Divider(height=30),
                 
-                # Render report outlet
+                # The Content Area
                 report_container,
             ], spacing=15),
             padding=20,

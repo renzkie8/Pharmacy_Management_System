@@ -7,7 +7,7 @@ from components.navigation_header import NavigationHeader
 def StaffPatientDetail(patient_id, source="search"):
     """Display detailed patient information (read-only)."""
     
-    # Retrieve target patient demographic data
+    # 1. Fetch Patient Data from DB
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM users WHERE id = ? AND role = 'Patient'", (patient_id,))
@@ -16,13 +16,13 @@ def StaffPatientDetail(patient_id, source="search"):
     
     # Determine back route based on source
     back_route = "/staff/patients" if source == "all" else "/staff/search"
-    back_title = "All Customers" if source == "all" else "Customer Search"
+    back_title = "All Patients" if source == "all" else "Patient Search"
     
     # Handle case where patient not found
     if not row:
         return ft.Column([
             NavigationHeader("Error", show_back=True, back_route=back_route),
-            ft.Text("Customer not found", color="error")
+            ft.Text("Patient not found", color="error")
         ])
     
     # Convert tuple to dictionary
@@ -32,7 +32,7 @@ def StaffPatientDetail(patient_id, source="search"):
         'created_at': row[10]
     }
     
-    # Information tile component
+    # Helper to create those little info squares
     def info_tile(label, value, icon):
         return ft.Container(
             content=ft.Row([
@@ -53,7 +53,7 @@ def StaffPatientDetail(patient_id, source="search"):
     return ft.Column([
         # Dynamic back route based on where user came from
         NavigationHeader(
-            f"Customer: {patient['full_name']}", 
+            f"Patient: {patient['full_name']}", 
             "View Details (Read-Only)", 
             show_back=True, 
             back_route=back_route
@@ -62,7 +62,7 @@ def StaffPatientDetail(patient_id, source="search"):
         ft.Container(
             padding=20,
             content=ft.Column([
-                # Render patient contextual header
+                # Profile Header Block
                 ft.Container(
                     content=ft.Row([
                         ft.Icon(ft.Icons.ACCOUNT_CIRCLE, size=80, color="primary"),
@@ -70,7 +70,7 @@ def StaffPatientDetail(patient_id, source="search"):
                             ft.Text(patient['full_name'], size=24, weight="bold"),
                             ft.Text(f"ID: {patient['id']}", size=14, color="outline"),
                             ft.Container(
-                                content=ft.Text("Customer", color="white", size=10, weight="bold"),
+                                content=ft.Text("Patient", color="white", size=10, weight="bold"),
                                 bgcolor="primary", padding=5, border_radius=5
                             )
                         ], spacing=2)
@@ -101,7 +101,7 @@ def StaffPatientDetail(patient_id, source="search"):
                 
                 ft.Container(height=30),
                 
-                # Display read-only restriction
+                # Read-only notice bar at bottom
                 ft.Container(
                     content=ft.Row([
                         ft.Icon(ft.Icons.LOCK, color="white"),

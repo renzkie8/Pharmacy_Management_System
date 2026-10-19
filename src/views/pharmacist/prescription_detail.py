@@ -9,18 +9,21 @@ from components.navigation_header import NavigationHeader
 def PrescriptionDetailView(prescription_id):
     """Detailed view for reviewing a single prescription."""
     
-    # Retrieve authenticated user session
+    # Get current pharmacist info for logging
     user = AppState.get_user()
     
-    # Component state definition
+    # A state variable to toggle between "View Mode" and "Edit Mode"
     is_editing = {"value": False}
     
-    # Prescription data retrieval
+    # Function to get data from the database
     def get_prescription():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        
+        # --- FIX: EXPLICIT COLUMNS ---
+        # I am listing every column name here instead of using SELECT *
+        # This prevents the bug where "Doctor Name" was showing up as "Duration"
+        # because the database columns were in a different order than expected.
         cursor.execute("""
             SELECT 
                 p.id,               -- 0
@@ -35,10 +38,10 @@ def PrescriptionDetailView(prescription_id):
                 p.doctor_name,      -- 9
                 p.pharmacist_notes, -- 10
                 p.reviewed_date,    -- 11
-                u.full_name,        -- 12
+                u.full_name,        -- 12 (patient name)
                 u.email,            -- 13
                 u.phone,            -- 14
-                m.name,             -- 15
+                m.name,             -- 15 (medicine name)
                 m.stock,            -- 16
                 m.price             -- 17
             FROM prescriptions p
@@ -53,7 +56,7 @@ def PrescriptionDetailView(prescription_id):
         if not row:
             return None
         
-        # Map database row to dictionary struct
+        # Return a dictionary so we can access data by name (easier to read)
         return {
             'id': row[0],
             'status': row[2],
@@ -61,7 +64,7 @@ def PrescriptionDetailView(prescription_id):
             'created_at': row[4],
             'dosage': row[6] if row[6] else '',
             'frequency': row[7] if row[7] else '',
-            'duration': row[8] if row[8] else 0,
+            'duration': row[8] if row[8] else 0, # Now guaranteed to be duration
             'doctor_name': row[9] if row[9] else '',
             'pharmacist_notes': row[10] if row[10] else '',
             'reviewed_date': row[11],
@@ -73,14 +76,14 @@ def PrescriptionDetailView(prescription_id):
             'medicine_price': row[17] if row[17] is not None else 0.0,
         }
     
-    # Initialize component data state
+    # Load the data
     rx = get_prescription()
     
-    # Validate data integrity
+    # Safety check
     if not rx:
         return ft.Text("Prescription not found")
     
-    # Map prescription status to theme colors
+    # Colors for the status badge
     status_colors = {
         "Pending": "tertiary",
         "Approved": "primary",
@@ -89,14 +92,15 @@ def PrescriptionDetailView(prescription_id):
     }
     status_color = status_colors.get(rx['status'], "outline")
     
-    # Editable Input Components
+    # --- EDITABLE FIELDS ---
+    # These text fields are used when the pharmacist clicks the "Edit" button
     medicine_field = ft.TextField(label="Medicine Name", value=rx['medicine_name'], border_color="outline")
     dosage_field = ft.TextField(label="Dosage", value=rx['dosage'], border_color="outline")
     frequency_field = ft.TextField(label="Frequency", value=rx['frequency'], border_color="outline")
     duration_field = ft.TextField(label="Duration (days)", value=str(rx['duration']), border_color="outline", keyboard_type=ft.KeyboardType.NUMBER)
     doctor_field = ft.TextField(label="Prescribed by", value=rx['doctor_name'], border_color="outline")
     
-    # Input Component: Pharmacist Review Notes
+    # Field for pharmacist to write notes (always visible in pending state)
     pharmacist_notes_field = ft.TextField(
         label="Pharmacist Notes (Optional)",
         multiline=True,
@@ -105,21 +109,23 @@ def PrescriptionDetailView(prescription_id):
         value=rx['pharmacist_notes'] or "",
     )
     
-    # Dynamic content container definition
+    # This container holds the details part of the screen (it swaps between View and Edit)
     prescription_container = ft.Column()
     
-    # Update transaction handler
+    # Logic to save changes if the pharmacist edits the details
     def save_prescription_details(e):
         conn = get_db_connection()
         cursor = conn.cursor()
         
         try:
-            # Resolve medicine reference by name
+            # --- FIX: RE-LINK MEDICINE ---
+            # If the pharmacist corrected the medicine name, we search for the ID again.
+            # This ensures the stock/price updates correctly.
             cursor.execute("SELECT id FROM medicines WHERE name LIKE ?", (f"%{medicine_field.value}%",))
             match = cursor.fetchone()
             new_med_id = match[0] if match else None
             
-            # Execute persistence update
+            # Update the database
             cursor.execute("""
                 UPDATE prescriptions 
                 SET medicine_id = ?, 
@@ -140,14 +146,14 @@ def PrescriptionDetailView(prescription_id):
             conn.commit()
             conn.close()
             
-            # Update local component state
+            # Update the local variable so the UI refreshes immediately
             rx['medicine_name'] = medicine_field.value
             rx['dosage'] = dosage_field.value
             rx['frequency'] = frequency_field.value
             rx['duration'] = int(duration_field.value) if duration_field.value.isdigit() else 0
             rx['doctor_name'] = doctor_field.value
             
-            # Reset interaction mode
+            # Turn off edit mode
             is_editing["value"] = False
             update_prescription_display(e)
             
@@ -160,25 +166,25 @@ def PrescriptionDetailView(prescription_id):
             e.page.snack_bar.open = True
             e.page.update()
     
-    # Interaction mode toggle handler
+    # Helper to toggle edit mode
     def toggle_edit_mode(e):
         is_editing["value"] = not is_editing["value"]
         update_prescription_display(e)
     
-    # Render detail view components
+    # Function that draws the details box
     def update_prescription_display(e):
         medicine_stock = rx['medicine_stock']
-        # Conditional stock warning logic
+        # Show red text if stock is low
         stock_color = "error" if medicine_stock < 10 else "primary"
         
         if is_editing["value"]:
-            # Render edit mode layout
+            # --- EDIT MODE UI ---
             prescription_container.controls = [
                 ft.Row([
                     ft.Icon(ft.Icons.MEDICATION, color="primary", size=32),
                     ft.Column([
                         ft.Text("Medicine", size=12, color="outline"),
-                        medicine_field,
+                        medicine_field, # Using the TextField
                     ], spacing=2, expand=True),
                 ], spacing=15),
                 
@@ -200,7 +206,7 @@ def PrescriptionDetailView(prescription_id):
                 ], spacing=10),
             ]
         else:
-            # Render view mode layout
+            # --- VIEW MODE UI ---
             prescription_container.controls = [
                 ft.Row([
                     ft.Icon(ft.Icons.MEDICATION, color="primary", size=32),
@@ -223,6 +229,7 @@ def PrescriptionDetailView(prescription_id):
                     ], expand=True),
                     ft.Column([
                         ft.Text("Duration", size=12, color="outline"),
+                        # Shows number of days correctly now
                         ft.Text(f"{rx['duration']} days", size=16, weight="bold"),
                     ], expand=True),
                 ], spacing=20),
@@ -244,10 +251,10 @@ def PrescriptionDetailView(prescription_id):
                     ], expand=True),
                 ], spacing=20),
                 
-                # UI Component: Notes Display Area
+                # Container for Doctor's Notes (Read Only)
                 ft.Container(
                     content=ft.Column([
-                        ft.Row([ft.Icon(ft.Icons.NOTE_ALT, size=20, color="tertiary"), ft.Text("Customer/Doctor Notes", weight="bold")]),
+                        ft.Row([ft.Icon(ft.Icons.NOTE_ALT, size=20, color="tertiary"), ft.Text("Patient/Doctor Notes", weight="bold")]),
                         ft.Text(rx['notes'] or "No additional notes", italic=True),
                     ], spacing=5),
                     bgcolor=ft.Colors.with_opacity(0.05, "tertiary"),
@@ -256,16 +263,16 @@ def PrescriptionDetailView(prescription_id):
                 )
             ]
         
-        # Trigger component repaint
+        # Refresh UI if the page is already loaded
         if e: e.page.update()
     
-    # Workflow Handler: Approve Prescription
+    # Logic for Approving
     def approve_prescription(e):
         try:
             conn = get_db_connection()
             cursor = conn.cursor()
             
-            # Execute status update transaction
+            # Update prescription status to Approved
             cursor.execute("""
                 UPDATE prescriptions 
                 SET status = 'Approved', pharmacist_id = ?, pharmacist_notes = ?, reviewed_date = ?
@@ -275,26 +282,27 @@ def PrescriptionDetailView(prescription_id):
             conn.commit()
             conn.close()
             
-            # Render success notification
+            # Show success message
             e.page.snack_bar = ft.SnackBar(content=ft.Text("Prescription Approved Successfully"), bgcolor="primary")
             e.page.snack_bar.open = True
             e.page.update()
             
-            # Trigger route transition
+            # Navigate back to prescriptions list
             e.page.go("/pharmacist/prescriptions")
             
         except Exception as ex:
+            print(f"Error approving prescription: {str(ex)}")
             e.page.snack_bar = ft.SnackBar(content=ft.Text(f"Error: {str(ex)}"), bgcolor="error")
             e.page.snack_bar.open = True
             e.page.update()
 
-    # Workflow Handler: Reject Prescription
+    # Logic for Rejecting
     def reject_prescription(e):
         try:
             conn = get_db_connection()
             cursor = conn.cursor()
             
-            # Execute status update transaction
+            # Update prescription status to Rejected
             cursor.execute("""
                 UPDATE prescriptions 
                 SET status = 'Rejected', pharmacist_id = ?, pharmacist_notes = ?, reviewed_date = ?
@@ -313,14 +321,15 @@ def PrescriptionDetailView(prescription_id):
             e.page.go("/pharmacist/prescriptions")
             
         except Exception as ex:
+            print(f"Error rejecting prescription: {str(ex)}")
             e.page.snack_bar = ft.SnackBar(content=ft.Text(f"Error: {str(ex)}"), bgcolor="error")
             e.page.snack_bar.open = True
             e.page.update()
 
-    # Initial component mount render
+    # Call this once at startup to render the View Mode
     update_prescription_display(None)
     
-    # UI Component: Summary Info Card
+    # Helper to make little info cards
     def info_card(title, value, icon, color):
         return ft.Container(
             content=ft.Row([
@@ -333,14 +342,14 @@ def PrescriptionDetailView(prescription_id):
             padding=15, border=ft.border.all(1, "outlineVariant"), border_radius=8, expand=True
         )
 
-    # Main View Layout Structure
+    # --- MAIN PAGE STRUCTURE ---
     return ft.Column([
-        # Primary Navigation Header
+        # Header with back button
         NavigationHeader(f"Prescription #{prescription_id}", "Review details", show_back=True, back_route="/pharmacist/prescriptions"),
         
         ft.Container(
             content=ft.Column([
-                # Status Indicator Panel
+                # Status Bar
                 ft.Row([
                     ft.Container(
                         content=ft.Text(rx['status'], color="white", weight="bold"),
@@ -351,24 +360,24 @@ def PrescriptionDetailView(prescription_id):
                 
                 ft.Container(height=20),
                 
-                # Patient Identity Section
-                ft.Text("Customer Information", size=20, weight="bold"),
+                # Patient Info Section
+                ft.Text("Patient Information", size=20, weight="bold"),
                 ft.Row([
-                    info_card("Customer Name", rx['patient_name'], ft.Icons.PERSON, "primary"),
+                    info_card("Patient Name", rx['patient_name'], ft.Icons.PERSON, "primary"),
                     info_card("Contact", rx['patient_email'], ft.Icons.EMAIL, "secondary"),
                     info_card("Phone", rx['patient_phone'], ft.Icons.PHONE, "tertiary"),
                 ], spacing=15),
                 
                 ft.Container(height=20),
                 
-                # Prescription Specification Header
+                # Details Section Header + Edit Button
                 ft.Row([
                     ft.Text("Prescription Details", size=20, weight="bold", expand=True),
-                    # Contextual action visibility
+                    # Edit button only visible if status is Pending
                     ft.IconButton(icon=ft.Icons.EDIT, tooltip="Edit Details", on_click=toggle_edit_mode, visible=rx['status']=='Pending')
                 ]),
                 
-                # Dynamic component mounting area
+                # The main details container (changes content based on edit mode)
                 ft.Container(
                     content=prescription_container,
                     padding=20, border=ft.border.all(1, "outlineVariant"), border_radius=10, bgcolor="surface"
@@ -376,7 +385,7 @@ def PrescriptionDetailView(prescription_id):
                 
                 ft.Container(height=20),
                 
-                # Processing Workflow Actions
+                # Action Section (Approve/Reject)
                 ft.Container(
                     content=ft.Column([
                         ft.Text("Pharmacist Review", size=20, weight="bold"),
@@ -390,7 +399,7 @@ def PrescriptionDetailView(prescription_id):
                     ]),
                     visible=rx['status'] == 'Pending'
                 ) if rx['status'] == 'Pending' else ft.Container(
-                    # Render final state summary
+                    # If not pending, show a simple info box
                     content=ft.Column([
                         ft.Icon(ft.Icons.INFO, size=40, color="outline"),
                         ft.Text(f"This prescription is {rx['status']}", size=16, color="outline")

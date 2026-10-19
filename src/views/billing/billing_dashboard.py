@@ -12,7 +12,7 @@ def BillingDashboard():
     user = AppState.get_user()
     user_name = user['full_name'] if user else "Billing Clerk"
     
-    # Initialize default metric values
+    # Initialize defaults
     pending_invoices = 0
     paid_today = 0
     revenue_today = 0.0
@@ -20,37 +20,37 @@ def BillingDashboard():
     recent_invoices = []
     recent_activities = []
 
-    # Data Retrieval and Aggregation
+    # --- FETCH STATS ---
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Query pending invoice totals
+        # 1. Pending Invoices Count
         cursor.execute("SELECT COUNT(*) FROM invoices WHERE status = 'Unpaid'")
         pending_invoices = cursor.fetchone()[0] or 0
         
-        # Query daily completed transactions count
+        # 2. Paid Today Count
         cursor.execute("SELECT COUNT(*) FROM invoices WHERE status = 'Paid' AND DATE(payment_date) = DATE('now')")
         paid_today = cursor.fetchone()[0] or 0
         
-        # Query daily realized revenue
+        # 3. Revenue Today
         cursor.execute("SELECT COALESCE(SUM(total_amount), 0) FROM invoices WHERE status = 'Paid' AND DATE(payment_date) = DATE('now')")
         revenue_today = cursor.fetchone()[0] or 0.0
         
-        # Query total outstanding receivables
+        # 4. Total Pending Amount
         cursor.execute("SELECT COALESCE(SUM(total_amount), 0) FROM invoices WHERE status = 'Unpaid'")
         pending_amount = cursor.fetchone()[0] or 0.0
         
-        # Query recent invoice records
+        # 5. Recent Invoices List
         cursor.execute("""
             SELECT i.id, i.invoice_number, i.total_amount, i.status, i.created_at, u.full_name as patient_name
             FROM invoices i
             LEFT JOIN users u ON i.patient_id = u.id
-            ORDER BY i.id ASC LIMIT 5
+            ORDER BY i.created_at DESC LIMIT 5
         """)
         recent_invoices = cursor.fetchall()
         
-        # Query recent user activity
+        # 6. Recent Activity List
         try:
             cursor.execute("""
                 SELECT action, details, timestamp FROM activity_log
@@ -62,11 +62,11 @@ def BillingDashboard():
         
         conn.close()
     except Exception as e:
-        pass
+        print(f"Dashboard Error: {e}")
     
-    # UI Component Definitions
+    # --- UI HELPERS ---
     
-    # UI Component: Statistics Card (Fixed Dimension)
+    # Fixed height stat card
     def create_stat_card(title, value, icon, color, subtitle="", is_currency=False):
         display_value = f"₱{value:,.2f}" if is_currency else str(value)
         return ft.Container(
@@ -81,7 +81,7 @@ def BillingDashboard():
                             weight="bold",
                             color=color,
                         ),
-                        # Vertical alignment spacer
+                        # Spacer keeps cards even if subtitle missing
                         ft.Text(subtitle, size=11, color="outline") if subtitle else ft.Container(height=16),
                     ], spacing=2, expand=True),
                 ], spacing=15),
@@ -91,7 +91,7 @@ def BillingDashboard():
             border_radius=10,
             border=ft.border.all(1, "outlineVariant"),
             expand=True,
-            height=140, # Apply constrained height
+            height=140, # FIXED HEIGHT applied here
         )
     
     def create_action_button(text, icon, route, color):
@@ -116,7 +116,7 @@ def BillingDashboard():
             content=ft.Row([
                 ft.Column([
                     ft.Text(f"Invoice #{inv[1]}", weight="bold", size=14),
-                    ft.Text(f"Customer: {inv[5]}", size=12, color="outline"),
+                    ft.Text(f"Patient: {inv[5]}", size=12, color="outline"),
                     ft.Text(f"Amount: ₱{inv[2]:,.2f}", size=13, weight="bold", color="primary"),
                     ft.Text(f"Date: {inv[4]}", size=11, color="outline", italic=True),
                 ], spacing=3, expand=True),
@@ -144,7 +144,7 @@ def BillingDashboard():
         icon = action_icons.get(action, '•')
         return ft.Text(f"{icon} {details}", size=12, color="outline")
     
-    # Render dynamic lists
+    # Generate list widgets
     invoice_widgets = [create_invoice_item(inv) for inv in recent_invoices] if recent_invoices else [ft.Container(content=ft.Text("No recent invoices", color="outline"), padding=20)]
     activity_widgets = [create_activity_item(a[0], a[1], a[2]) for a in recent_activities] if recent_activities else [ft.Text("No recent activity", color="outline")]
     
@@ -172,7 +172,6 @@ def BillingDashboard():
                             create_action_button("View All Invoices", ft.Icons.RECEIPT_LONG, "/billing/invoices", "secondary"),
                             create_action_button("Payment History", ft.Icons.HISTORY, "/billing/payments", "tertiary"),
                             create_action_button("Generate Report", ft.Icons.ANALYTICS, "/billing/reports", "primary"),
-                            create_action_button("Verify Orders", ft.Icons.VERIFIED, "/staff/orders", "secondary"),
                         ], spacing=15, wrap=True),
                     ], spacing=15),
                     padding=20, bgcolor="surface", border_radius=10, border=ft.border.all(1, "outlineVariant"),

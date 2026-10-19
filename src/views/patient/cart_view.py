@@ -1,44 +1,29 @@
-"""Shopping cart view with real database integration - FIXED VERSION."""
+"""Shopping cart view with real database integration."""
 
 import flet as ft
 from state import AppState
 from services.database import get_db_connection
-from utils.notifications import show_success, show_error, show_warning, ITEM_REMOVED, ORDER_PLACED, OPERATION_FAILED
 
 def CartView():
     """Shopping cart view with persistent cart data."""
     
-    # Validate user session
+    # check login
     user = AppState.get_user()
     if not user:
         return ft.Text("Please log in first", color="error")
     
     user_id = user['id']
     
-    # Initialize UI containers
+    # containers for cart items and the bill summary
     cart_container = ft.Column(spacing=10)
     summary_container = ft.Container()
     
-    # Discount request dropdown
-    discount_dropdown = ft.Dropdown(
-        label="Discount Request (Subject to Verification)",
-        options=[
-            ft.dropdown.Option("None"),
-            ft.dropdown.Option("Senior Citizen"),
-            ft.dropdown.Option("PWD"),
-        ],
-        value="None",
-        width=300,
-        text_size=14,
-        content_padding=10
-    )
-    
-    # Retrieve cart contents
+    # fetch cart data from DB
     def load_cart():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Ensure schema exists
+        # make sure table exists
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS cart (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -51,7 +36,7 @@ def CartView():
             )
         """)
         
-        # Query cart items
+        # get items + medicine info joined
         cursor.execute("""
             SELECT 
                 c.id,
@@ -70,81 +55,52 @@ def CartView():
         
         return items
     
-    # Handle quantity updates with stock synchronization
-    def update_quantity(cart_id, medicine_id, new_quantity, old_quantity, stock, e):
+    # changing quantity logic
+    def update_quantity(cart_id, medicine_id, new_quantity, stock, e):
         if new_quantity <= 0:
-            remove_from_cart(cart_id, medicine_id, old_quantity, e)
+            remove_from_cart(cart_id, e)
             return
-
-        diff = new_quantity - old_quantity
-        if diff == 0:
-            return
-
-        conn = get_db_connection()
-        cursor = conn.cursor()
         
-        try:
-            # If incrementing, check if enough stock is actually available in DB (keeping at least 1)
-            if diff > 0:
-                cursor.execute("SELECT stock FROM medicines WHERE id = ?", (medicine_id,))
-                db_stock = cursor.fetchone()[0]
-                if db_stock - diff < 1:
-                    show_error(e.page, f"At least 1 unit of {medicine_id} must remain in the warehouse stock")
-                    return
-
-            # Update both tables in a single transaction
-            cursor.execute("UPDATE cart SET quantity = ? WHERE id = ?", (new_quantity, cart_id))
-            cursor.execute("UPDATE medicines SET stock = stock - ? WHERE id = ?", (diff, medicine_id))
-            
-            conn.commit()
-
-            # Emit cart changed event to update badge and sidebar
-            try:
-                AppState.emit('cart_changed')
-            except Exception:
-                pass
-
-            # Show success indicator
-            AppState.show_success()
-            refresh_cart(e)
-            
-        except Exception as ex:
-            if conn: conn.rollback()
-            show_error(e.page, f"Update failed: {str(ex)}")
-        finally:
-            conn.close()
-    
-    # Handle item removal with stock restoration
-    def remove_from_cart(cart_id, medicine_id, quantity, e):
+        if new_quantity > stock:
+            show_snackbar(e, f"Only {stock} items available in stock", error=True)
+            return
+        
         conn = get_db_connection()
         cursor = conn.cursor()
+        cursor.execute("UPDATE cart SET quantity = ? WHERE id = ?", (new_quantity, cart_id))
+        conn.commit()
+        conn.close()
+        
+        # Emit cart changed event to update badge across app
         try:
-            # Restore the stock in medicines table
-            cursor.execute("UPDATE medicines SET stock = stock + ? WHERE id = ?", (quantity, medicine_id))
-            
-            # Delete from cart
-            cursor.execute("DELETE FROM cart WHERE id = ?", (cart_id,))
-            
-            conn.commit()
-
-            # Emit cart changed event to update badge and sidebar
-            try:
-                AppState.emit('cart_changed')
-            except Exception:
-                pass
-
-            # Show success indicator
-            AppState.show_success()
-            show_success(e.page, ITEM_REMOVED.format("Item"))
-            refresh_cart(e)
-            
-        except Exception as ex:
-            if conn: conn.rollback()
-            show_error(e.page, f"Removal failed: {str(ex)}")
-        finally:
-            conn.close()
+            AppState.emit('cart_changed')
+        except Exception:
+            pass
+        
+        # Show success indicator
+        AppState.show_success()
+        refresh_cart(e)
     
-    # Display notification
+    # deleting from cart logic
+    def remove_from_cart(cart_id, e):
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM cart WHERE id = ?", (cart_id,))
+        conn.commit()
+        conn.close()
+        
+        # Emit cart changed event to update badge across app
+        try:
+            AppState.emit('cart_changed')
+        except Exception:
+            pass
+        
+        # Show success indicator
+        AppState.show_success()
+        show_snackbar(e, "Item removed from cart")
+        refresh_cart(e)
+    
+    # helper for showing messages
     def show_snackbar(e, message, error=False):
         e.page.snack_bar = ft.SnackBar(
             content=ft.Text(message),
@@ -153,7 +109,7 @@ def CartView():
         e.page.snack_bar.open = True
         e.page.update()
     
-    # Render cart item component
+    # creates the visual row for an item
     def create_cart_item(item):
         cart_id = item[0]
         medicine_id = item[1]
@@ -167,7 +123,7 @@ def CartView():
             width=60,
             text_align=ft.TextAlign.CENTER,
             border_color="outline",
-            on_submit=lambda e: update_quantity(cart_id, medicine_id, int(e.control.value), quantity, stock, e)
+            on_submit=lambda e: update_quantity(cart_id, medicine_id, int(e.control.value), stock, e)
         )
         
         return ft.Container(
@@ -193,14 +149,14 @@ def CartView():
                         icon=ft.Icons.REMOVE,
                         icon_size=16,
                         icon_color="primary",
-                        on_click=lambda e: update_quantity(cart_id, medicine_id, quantity - 1, quantity, stock, e)
+                        on_click=lambda e: update_quantity(cart_id, medicine_id, quantity - 1, stock, e)
                     ),
                     quantity_field,
                     ft.IconButton(
                         icon=ft.Icons.ADD,
                         icon_size=16,
                         icon_color="primary",
-                        on_click=lambda e: update_quantity(cart_id, medicine_id, quantity + 1, quantity, stock, e)
+                        on_click=lambda e: update_quantity(cart_id, medicine_id, quantity + 1, stock, e)
                     ),
                 ], spacing=5),
                 # total price for this line
@@ -215,7 +171,7 @@ def CartView():
                     icon=ft.Icons.DELETE_OUTLINE,
                     icon_color="error",
                     tooltip="Remove from cart",
-                    on_click=lambda e: remove_from_cart(cart_id, medicine_id, quantity, e)
+                    on_click=lambda e: remove_from_cart(cart_id, e)
                 ),
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, spacing=15),
             padding=15,
@@ -224,108 +180,83 @@ def CartView():
             bgcolor="surface",
         )
     
-    # ✅ FIXED: Process checkout with prescription approval tracking
+    # checkout button logic
     def proceed_to_checkout(e):
         items = load_cart()
         if not items:
-            show_error(e.page, "Cart is empty")
+            show_snackbar(e, "Cart is empty", error=True)
             return
-
-        # Create order records
+        
+        # turning cart into an order
         conn = get_db_connection()
         cursor = conn.cursor()
-
+        
         try:
-            # Calculate order totals
+            # math for totals
             subtotal = sum(item[3] * item[4] for item in items)
             tax = subtotal * 0.12
             total = subtotal + tax
-
-            # Insert order record with discount request
+            
+            # create the order
             cursor.execute("""
-                INSERT INTO orders (patient_id, total_amount, status, payment_status, discount_request)
-                VALUES (?, ?, 'Pending', 'Unpaid', ?)
-            """, (user_id, total, discount_dropdown.value))
-
+                INSERT INTO orders (patient_id, total_amount, status, payment_status)
+                VALUES (?, ?, 'Pending', 'Unpaid')
+            """, (user_id, total))
+            
             order_id = cursor.lastrowid
-
-            # ✅ FIX: Process individual line items WITH prescription approval check
+            
+            # move items to order_items table and reduce stock
             for item in items:
                 medicine_id = item[1]
                 quantity = item[4]
                 unit_price = item[3]
                 subtotal_item = unit_price * quantity
-
-                # ✅ KEY FIX: Check if this medicine is from an APPROVED prescription
+                
+                # check stock one last time
+                cursor.execute("SELECT stock FROM medicines WHERE id = ?", (medicine_id,))
+                current_stock = cursor.fetchone()[0]
+                
+                if current_stock < quantity:
+                    raise Exception(f"Insufficient stock for {item[2]}")
+                
                 cursor.execute("""
-                    SELECT id, pharmacist_id, reviewed_date
-                    FROM prescriptions
-                    WHERE patient_id = ?
-                    AND medicine_id = ?
-                    AND status = 'Approved'
-                    ORDER BY reviewed_date DESC
-                    LIMIT 1
-                """, (user_id, medicine_id))
+                    INSERT INTO order_items (order_id, medicine_id, quantity, unit_price, subtotal)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (order_id, medicine_id, quantity, unit_price, subtotal_item))
                 
-                approved_prescription = cursor.fetchone()
-                
-                # If prescription is approved, mark the order item as approved
-                if approved_prescription:
-                    prescription_id, pharmacist_id, reviewed_date = approved_prescription
-                    
-                    # ✅ Insert order item WITH pharmacist approval
-                    cursor.execute("""
-                        INSERT INTO order_items 
-                        (order_id, medicine_id, quantity, unit_price, subtotal, 
-                         pharmacist_approved, pharmacist_id, approval_notes)
-                        VALUES (?, ?, ?, ?, ?, 1, ?, ?)
-                    """, (
-                        order_id, 
-                        medicine_id, 
-                        quantity, 
-                        unit_price, 
-                        subtotal_item,
-                        pharmacist_id,
-                        f"Pre-approved via Prescription #{prescription_id}"
-                    ))
-                else:
-                    # ⏳ Insert order item WITHOUT pharmacist approval (needs review)
-                    cursor.execute("""
-                        INSERT INTO order_items 
-                        (order_id, medicine_id, quantity, unit_price, subtotal, 
-                         pharmacist_approved, pharmacist_id, approval_notes)
-                        VALUES (?, ?, ?, ?, ?, 0, NULL, NULL)
-                    """, (order_id, medicine_id, quantity, unit_price, subtotal_item))
-
-                # Inventory deduction REMOVED from here because it's now handled in real-time
-                # when items are added to the cart or quantities are adjusted.
-
-            # Clear processed cart
+                # update the stock number
+                cursor.execute("""
+                    UPDATE medicines 
+                    SET stock = stock - ? 
+                    WHERE id = ?
+                """, (quantity, medicine_id))
+            
+            # empty the cart
             cursor.execute("DELETE FROM cart WHERE patient_id = ?", (user_id,))
-
+            
             conn.commit()
-
+            
             # Emit cart changed event to update badge across app
             try:
                 AppState.emit('cart_changed')
             except Exception:
                 pass
-
+            
             # Show success indicator
             AppState.show_success()
-            show_success(e.page, ORDER_PLACED.format(order_id))
+            show_snackbar(e, f"Order #{order_id} created successfully!")
             refresh_cart(e)
-
-            # Navigate to POS Receipt
-            e.page.go(f"/patient/pos_receipt/{order_id}")
-
+            
+            # go to orders page
+            e.page.go("/patient/orders")
+            
         except Exception as ex:
             conn.rollback()
-            show_error(e.page, f"{OPERATION_FAILED}: {str(ex)}")
+            show_snackbar(e, f"Checkout failed: {str(ex)}", error=True)
         finally:
             conn.close()
     
-    # Refresh cart interface
+    # reloads the whole cart UI
     def refresh_cart(e):
         items = load_cart()
         
@@ -340,7 +271,7 @@ def CartView():
             tax = subtotal * 0.12
             total = subtotal + tax
             
-            # Render order summary
+            # updating the summary box
             summary_container.content = ft.Column([
                 ft.Text("Order Summary", size=20, weight="bold"),
                 ft.Divider(),
@@ -359,11 +290,7 @@ def CartView():
                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                 ft.Container(height=10),
                 
-                # Discount dropdown
-                discount_dropdown,
-                ft.Container(height=10),
-                
-                # Render centered actions
+                # CENTERED BUTTONS AS REQUESTED
                 ft.ElevatedButton(
                     "Proceed to Checkout",
                     width=300,
@@ -379,9 +306,9 @@ def CartView():
                     icon=ft.Icons.ARROW_BACK,
                     on_click=lambda e: e.page.go("/patient/search"),
                 ),
-            ], spacing=10, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
+            ], spacing=10, horizontal_alignment=ft.CrossAxisAlignment.CENTER) # <--- This centers them
         else:
-            # Render empty state
+            # empty state logic
             summary_container.content = ft.Column([
                 ft.Icon(ft.Icons.SHOPPING_CART_OUTLINED, size=100, color="outline"),
                 ft.Text("Your cart is empty", size=20, color="outline"),
@@ -397,11 +324,11 @@ def CartView():
         
         e.page.update()
     
-    # Initial component mount
+    # initial load
     items = load_cart()
     
     if not items:
-        # Handle initial empty cart
+        # returns the empty cart view if nothing is there
         return ft.Column([
             ft.Text("Shopping Cart", size=28, weight="bold"),
             ft.Container(height=20),
@@ -423,16 +350,16 @@ def CartView():
             ),
         ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=0)
     
-    # Render initial cart inventory
+    # if items exist, render them
     for item in items:
         cart_container.controls.append(create_cart_item(item))
     
-    # Evaluate initial order totals
+    # initial math for the summary
     subtotal = sum(item[3] * item[4] for item in items)
     tax = subtotal * 0.12
     total = subtotal + tax
     
-    # Initial summary container
+    # initial summary layout
     summary_container.content = ft.Column([
         ft.Text("Order Summary", size=20, weight="bold"),
         ft.Divider(),
@@ -451,11 +378,7 @@ def CartView():
         ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
         ft.Container(height=10),
         
-        # Discount dropdown
-        discount_dropdown,
-        ft.Container(height=10),
-        
-        # Navigation controls
+        # CENTERED BUTTONS AGAIN
         ft.ElevatedButton(
             "Proceed to Checkout",
             width=300,
@@ -473,7 +396,7 @@ def CartView():
         ),
     ], spacing=10, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
     
-    # Primary layout structure
+    # Final page structure
     return ft.Column([
         ft.Row([
             ft.Text("Shopping Cart", size=28, weight="bold"),
@@ -500,4 +423,3 @@ def CartView():
             ),
         ], alignment=ft.MainAxisAlignment.CENTER),
     ], scroll=ft.ScrollMode.AUTO, spacing=0)
-

@@ -8,31 +8,31 @@ from components.navigation_header import NavigationHeader
 def StaffDashboard():
     """Staff member dashboard with overview."""
     
-    # Contextual user awareness
+    # Get who is currently logged in so we can say "Welcome [Name]"
     user = AppState.get_user()
     user_name = user['full_name'] if user else "Staff Member"
     
-    # Metrics Aggregation
-    # Retrieve KPIs from database
+    # --- DATABASE STUFF ---
+    # We need to open a connection to get the numbers for the dashboard cards
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # Aggregate patient total
+    # 1. Count how many patients exist in total
     cursor.execute("SELECT COUNT(*) FROM users WHERE role = 'Patient'")
     total_patients = cursor.fetchone()[0]
     
-    # Retrieve current day new user metrics
+    # 2. Count how many joined TODAY
     cursor.execute("""
         SELECT COUNT(*) FROM users 
         WHERE role = 'Patient' AND DATE(created_at) = DATE('now')
     """)
     new_today = cursor.fetchone()[0]
     
-    # Calculate pending prescription volume
+    # 3. Count prescriptions that are waiting for the pharmacist
     cursor.execute("SELECT COUNT(*) FROM prescriptions WHERE status = 'Pending'")
     active_prescriptions = cursor.fetchone()[0]
     
-    # Retrieve most recent user records
+    # 4. Get the 5 newest patients to show in the "Recent" box
     cursor.execute("""
         SELECT id, full_name, phone, email, created_at
         FROM users
@@ -42,12 +42,12 @@ def StaffDashboard():
     """)
     recent_patients = cursor.fetchall()
     
-    # Terminate DB Connection
+    # Always close the connection when done!
     conn.close()
     
-    # Interface Component Helpers
+    # --- UI HELPERS ---
     
-    # Metric card component factory
+    # This function makes those big colorful number cards at the top
     def create_stat_card(title, value, icon, color):
         return ft.Container(
             content=ft.Column([
@@ -62,7 +62,7 @@ def StaffDashboard():
             expand=True, # This makes all 3 cards the same width
         )
     
-    # Navigation action button generator
+    # This makes the big wide buttons for "Quick Actions"
     def create_action_button(text, icon, route, color):
         return ft.ElevatedButton(
             content=ft.Row([
@@ -78,17 +78,17 @@ def StaffDashboard():
             width=1000, # Force it to stretch
         )
     
-    # List element factory for recent patients
+    # Creates a row for the "Recent Patients" list
     def create_patient_item(patient):
         return ft.Container(
             content=ft.Row([
                 ft.Icon(ft.Icons.PERSON, color="primary", size=24),
                 ft.Column([
                     ft.Text(patient[1], size=14, weight="bold"),
-                    # Truncate timestamp to date format
+                    # Show only the date part of the timestamp (first 10 chars)
                     ft.Text(f"Reg: {patient[4][:10]}", size=11, color="outline"),
                 ], spacing=2, expand=True),
-                # Transition trigger to detailed view
+                # Arrow button to go to details
                 ft.IconButton(
                     icon=ft.Icons.ARROW_FORWARD_IOS,
                     icon_size=16,
@@ -106,7 +106,7 @@ def StaffDashboard():
         # Dashboard Header (No back button because this is the home page)
         NavigationHeader(
             f"Welcome, {user_name}",
-            "Staff Portal - Assist with customer records and inquiries",
+            "Staff Portal - Assist with patient records and inquiries",
             show_back=False,
         ),
         
@@ -117,7 +117,7 @@ def StaffDashboard():
                 
                 # 1. The Stats Row (The 3 boxes)
                 ft.Row([
-                    create_stat_card("Total Customers", total_patients, ft.Icons.GROUPS, "primary"),
+                    create_stat_card("Total Patients", total_patients, ft.Icons.GROUPS, "primary"),
                     create_stat_card("New Today", new_today, ft.Icons.PERSON_ADD, "secondary"),
                     create_stat_card("Active Rx", active_prescriptions, ft.Icons.MEDICATION, "tertiary"),
                 ], spacing=15),
@@ -130,9 +130,8 @@ def StaffDashboard():
                     ft.Container(
                         content=ft.Column([
                             ft.Text("Quick Actions", size=18, weight="bold"),
-                            create_action_button("📦 Order Tracking", ft.Icons.LOCAL_SHIPPING, "/staff/orders", "tertiary"),
-                            create_action_button("Search Customers", ft.Icons.SEARCH, "/staff/search", "primary"),
-                            create_action_button("View All Customers", ft.Icons.LIST, "/staff/patients", "secondary"),
+                            create_action_button("Search Patients", ft.Icons.SEARCH, "/staff/search", "primary"),
+                            create_action_button("View All Patients", ft.Icons.LIST, "/staff/patients", "secondary"),
                             create_action_button("Help Desk", ft.Icons.HELP, "/staff/help", "tertiary"),
                             
                             ft.Container(height=20),
@@ -142,8 +141,9 @@ def StaffDashboard():
                                 content=ft.Column([
                                     ft.Text("Recent Registrations", size=16, weight="bold"),
                                     ft.Divider(),
-                                    # Comprehension-based list rendering
-                                    *([create_patient_item(p) for p in recent_patients] if recent_patients else [ft.Text("No new customers today", italic=True)]),
+                                    # This is a cool python trick: It loops through patients and makes a widget for each.
+                                    # If list is empty, it shows a text message instead.
+                                    *([create_patient_item(p) for p in recent_patients] if recent_patients else [ft.Text("No new patients today", italic=True)]),
                                 ], spacing=10),
                                 padding=20,
                                 bgcolor="surface",
@@ -161,7 +161,7 @@ def StaffDashboard():
                             ft.Container(
                                 content=ft.Column([
                                     ft.Row([ft.Icon(ft.Icons.CHECK_CIRCLE, size=16, color="primary"), ft.Text("Verify ID before sharing info", size=13)], spacing=10),
-                                    ft.Row([ft.Icon(ft.Icons.CHECK_CIRCLE, size=16, color="primary"), ft.Text("Keep customer data confidential", size=13)], spacing=10),
+                                    ft.Row([ft.Icon(ft.Icons.CHECK_CIRCLE, size=16, color="primary"), ft.Text("Keep patient data confidential", size=13)], spacing=10),
                                     ft.Row([ft.Icon(ft.Icons.CHECK_CIRCLE, size=16, color="primary"), ft.Text("Report errors to Admin", size=13)], spacing=10),
                                     ft.Row([ft.Icon(ft.Icons.CHECK_CIRCLE, size=16, color="primary"), ft.Text("Be polite and professional", size=13)], spacing=10),
                                 ], spacing=15),
@@ -177,7 +177,7 @@ def StaffDashboard():
                             ft.Container(
                                 content=ft.Row([
                                     ft.Icon(ft.Icons.LOCK, color="tertiary"),
-                                    ft.Text("You have Read-Only access to customers.", size=12, expand=True)
+                                    ft.Text("You have Read-Only access to patients.", size=12, expand=True)
                                 ], spacing=10),
                                 padding=15,
                                 bgcolor=ft.Colors.with_opacity(0.1, "tertiary"),

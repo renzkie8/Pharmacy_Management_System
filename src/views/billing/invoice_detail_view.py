@@ -12,11 +12,11 @@ def InvoiceDetailView(invoice_id):
     if not user:
         return ft.Text("Please log in first", color="error")
     
-    # Establish database connection
+    # Get invoice data
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # Query invoice metadata
+    # Get invoice details
     cursor.execute("""
         SELECT 
             i.id,
@@ -65,7 +65,7 @@ def InvoiceDetailView(invoice_id):
             )
         ])
     
-    # Query related order line items
+    # Get order items if order exists
     order_items = []
     if invoice[3]:  # order_id
         cursor.execute("""
@@ -82,10 +82,10 @@ def InvoiceDetailView(invoice_id):
     
     conn.close()
     
-    # Unpack invoice record parameters
+    # Extract invoice data
     inv_id, inv_num, patient_id, order_id, subtotal, tax, discount, total, status, payment_method, payment_date, notes, created_at, patient_name, username, email, phone, address = invoice
     
-    # Helper function for date formatting
+    # Format date
     def format_date(date_str):
         try:
             dt = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
@@ -93,7 +93,7 @@ def InvoiceDetailView(invoice_id):
         except:
             return date_str
     
-    # Configure state color mapping
+    # Status colors
     status_colors = {
         'Paid': 'primary',
         'Unpaid': 'error',
@@ -103,14 +103,14 @@ def InvoiceDetailView(invoice_id):
     status_color = status_colors.get(status, 'outline')
     
     return ft.Column([
-        # Render view header
+        # Header
         ft.Row([
             ft.Text("Invoice Details", size=28, weight="bold"),
         ]),
         
         ft.Container(height=10),
         
-        # Render biller and invoice metadata card
+        # Invoice header card
         ft.Container(
             content=ft.Column([
                 ft.Row([
@@ -132,20 +132,20 @@ def InvoiceDetailView(invoice_id):
                 
                 ft.Divider(height=30),
                 
-                # Render client and transaction details
+                # Patient & Invoice info
                 ft.Row([
-                    # Render bill to details
+                    # Bill To
                     ft.Column([
                         ft.Text("BILL TO:", size=12, weight="bold", color="outline"),
                         ft.Container(height=5),
                         ft.Text(patient_name or username, size=16, weight="bold"),
-                        ft.Text(f"Customer ID: {patient_id}", size=12, color="outline"),
+                        ft.Text(f"Patient ID: {patient_id}", size=12, color="outline"),
                         ft.Text(email or "john@gmail.com", size=12),
                         ft.Text(phone or "+63947565643321", size=12),
                         ft.Text(address or "San Miguel", size=12),
                     ], expand=True),
                     
-                    # Render transaction identifiers
+                    # Invoice Details
                     ft.Column([
                         ft.Text("INVOICE DETAILS:", size=12, weight="bold", color="outline"),
                         ft.Container(height=5),
@@ -176,13 +176,13 @@ def InvoiceDetailView(invoice_id):
         
         ft.Container(height=20),
         
-        # Render line items collection
+        # Order items table
         ft.Container(
             content=ft.Column([
                 ft.Text("Items", size=20, weight="bold"),
                 ft.Divider(),
                 
-                # Render table header
+                # Table header
                 ft.Container(
                     content=ft.Row([
                         ft.Text("Item", size=13, weight="bold", expand=2),
@@ -195,7 +195,7 @@ def InvoiceDetailView(invoice_id):
                     border_radius=8,
                 ),
                 
-                # Render line items
+                # Table rows
                 ft.Column([
                     ft.Container(
                         content=ft.Row([
@@ -222,9 +222,9 @@ def InvoiceDetailView(invoice_id):
         
         ft.Container(height=20),
         
-        # Render financial aggregation block
+        # Summary section
         ft.Row([
-            # Render transaction annotations
+            # Notes (left side)
             ft.Container(
                 content=ft.Column([
                     ft.Text("Notes:", size=14, weight="bold"),
@@ -237,7 +237,7 @@ def InvoiceDetailView(invoice_id):
                 expand=True,
             ),
             
-            # Render financial summary
+            # Totals (right side)
             ft.Container(
                 content=ft.Column([
                     ft.Row([
